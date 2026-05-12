@@ -7,7 +7,7 @@
    • Same-origin (served by Express):  ""   (empty string)
    • Separate dev server:              "http://localhost:3000"
    ──────────────────────────────────────────────────────────── */
-const BACKEND_BASE_URL = "";  // ← edit this when needed
+const BACKEND_BASE_URL = "http://localhost:3000";  // ← your Express backend
 const API = `${BACKEND_BASE_URL}/api`;
 
 // ─── State ───────────────────────────────────────────────────
