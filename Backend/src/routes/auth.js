@@ -49,8 +49,9 @@ router.post("/send-otp", async (req, res) => {
       });
     }
 
-    // Send OTP email
-    await sendOtpEmail(email, otp);
+    // Send OTP email in background
+    sendOtpEmail(email, otp).catch(e => console.error("BG Email Error:", e));
+    console.log(`📡 Sending OTP [${otp}] to ${email} (Background)...`);
 
     res.json({ message: "OTP sent successfully to your email." });
   } catch (err) {
@@ -114,44 +115,54 @@ router.post("/register", async (req, res) => {
  * Authenticates the user and sets a JWT cookie.
  */
 router.post("/login", async (req, res) => {
+  console.log(`🔐 Login attempt for: ${req.body.email}`);
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
+      console.log("❌ Missing credentials");
       return res.status(400).json({ error: "Email and password are required." });
     }
 
+    console.log("🔍 Searching database...");
     const result = await db.select().from(users).where(eq(users.email, email));
+    console.log(`✅ DB Search done. Found: ${result.length} users`);
 
     if (result.length === 0) {
+      console.log("❌ User not found");
       return res.status(404).json({ error: "No account found with this email." });
     }
 
     const user = result[0];
 
     if (!user.is_verified) {
+      console.log("❌ User not verified");
       return res.status(403).json({ error: "Please complete registration first." });
     }
 
+    console.log("🔑 Checking password...");
     if (user.password !== password) {
+      console.log("❌ Incorrect password");
       return res.status(401).json({ error: "Incorrect password." });
     }
 
-    // Create JWT
+    console.log("✍️ Signing JWT token...");
+    const secret = process.env.JWT_SECRET || "fallback-secret-123";
     const token = jwt.sign(
       { id: user.id, name: user.name, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
+      secret,
       { expiresIn: "7d" }
     );
 
-    // Set cookie — not HttpOnly, not Secure, not SameSite strict (for local testing)
+    console.log("🍪 Setting cookie...");
     res.cookie("token", token, {
       httpOnly: false,
       secure: false,
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
+    console.log("🎉 Login successful response being sent!");
     res.json({
       message: "Login successful.",
       token,
@@ -160,8 +171,8 @@ router.post("/login", async (req, res) => {
       role: user.role,
     });
   } catch (err) {
-    console.error("login error:", err);
-    res.status(500).json({ error: "Login failed. Please try again." });
+    console.error("🔥 CRITICAL LOGIN ERROR:", err);
+    res.status(500).json({ error: "Internal server error: " + err.message });
   }
 });
 

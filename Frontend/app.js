@@ -7,7 +7,7 @@
    • Same-origin (served by Express):  ""   (empty string)
    • Separate dev server:              "http://localhost:3000"
    ──────────────────────────────────────────────────────────── */
-const BACKEND_BASE_URL = "http://localhost:3000";  // ← your Express backend
+const BACKEND_BASE_URL = window.location.port === "3000" ? "" : "http://localhost:3000";
 const API = `${BACKEND_BASE_URL}/api`;
 
 // ─── State ───────────────────────────────────────────────────
@@ -18,14 +18,22 @@ let currentPage = null;
 async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json" };
   const token = localStorage.getItem("token");
+  
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
+
   const res = await fetch(`${API}${path}`, {
     credentials: "include",
     headers,
     ...options,
   });
+
+  // Handle the initial session check silently
+  if (res.status === 401 && path === "/auth/me") {
+    throw new Error("UNAUTHORIZED_SILENT");
+  }
+
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Something went wrong.");
   return data;
@@ -33,6 +41,7 @@ async function api(path, options = {}) {
 
 function showToast(message, type = "success") {
   const container = document.getElementById("toast-container");
+  if (!container) return;
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
   toast.textContent = message;
@@ -42,6 +51,27 @@ function showToast(message, type = "success") {
     setTimeout(() => toast.remove(), 300);
   }, 3500);
 }
+
+// ─── Modal Management ─────────────────────────────────────────
+function openModal(contentHtml) {
+  const container = document.getElementById("modal-container");
+  container.innerHTML = `<div class="modal-content">${contentHtml}</div>`;
+  container.style.display = "flex";
+  document.body.style.overflow = "hidden"; // Prevent scrolling
+}
+
+function closeModal() {
+  const container = document.getElementById("modal-container");
+  container.style.display = "none";
+  container.innerHTML = "";
+  document.body.style.overflow = "auto";
+}
+
+// Close modal on click outside
+window.addEventListener("click", (e) => {
+  const container = document.getElementById("modal-container");
+  if (e.target === container) closeModal();
+});
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-IN", {
@@ -62,6 +92,18 @@ function escapeHTML(str) {
 // ─── Navigation ──────────────────────────────────────────────
 function navigate(page) {
   currentPage = page;
+  
+  const navbar = document.getElementById("navbar");
+  const mainContent = document.getElementById("app");
+  
+  if (page === "admin") {
+    if (navbar) navbar.classList.add("hidden-admin");
+    if (mainContent) mainContent.classList.add("admin-mode");
+  } else {
+    if (navbar) navbar.classList.remove("hidden-admin");
+    if (mainContent) mainContent.classList.remove("admin-mode");
+  }
+  
   renderNavbar();
   renderPage();
 }
@@ -70,13 +112,14 @@ function renderNavbar() {
   const actions = document.getElementById("nav-actions");
   if (!currentUser) {
     actions.innerHTML = `
+      <button class="btn btn-ghost" onclick="navigate('track')">Track Complaint</button>
       <button class="btn btn-ghost" id="nav-login-btn" onclick="navigate('login')">Log In</button>
       <button class="btn btn-primary" id="nav-register-btn" onclick="navigate('register')" style="padding:8px 18px;font-size:0.85rem;">Sign Up</button>
     `;
   } else {
     let links = "";
     if (currentUser.role === "admin") {
-      links = `<button class="btn btn-ghost" id="nav-admin-btn" onclick="navigate('admin')">Dashboard</button>`;
+      links = `<button class="btn btn-ghost" id="nav-admin-btn" onclick="navigate('admin')">Admin Dashboard</button>`;
     } else {
       links = `
         <button class="btn btn-ghost" id="nav-my-btn" onclick="navigate('my-complaints')">My Complaints</button>
@@ -93,6 +136,9 @@ function renderNavbar() {
 function renderPage() {
   const app = document.getElementById("app");
   switch (currentPage) {
+    case "track":
+      renderTrackPage(app);
+      break;
     case "register":
       renderRegisterPage(app);
       break;
@@ -115,6 +161,14 @@ function renderPage() {
 
 // ─── Session Check ───────────────────────────────────────────
 async function checkSession() {
+  const token = localStorage.getItem("token");
+  
+  if (!token) {
+    currentUser = null;
+    navigate("login");
+    return;
+  }
+
   try {
     const data = await api("/auth/me");
     currentUser = data;
@@ -123,7 +177,8 @@ async function checkSession() {
     } else {
       navigate("my-complaints");
     }
-  } catch {
+  } catch (err) {
+    localStorage.removeItem("token");
     currentUser = null;
     navigate("login");
   }
@@ -390,6 +445,9 @@ function renderLoginPage(container) {
     </div>
     <div class="form-footer">
       Don't have an account? <button class="text-link" id="go-to-register-link" onclick="navigate('register')">Create one</button>
+      <div style="margin-top:15px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px;">
+        <button class="text-link" style="font-size:0.75rem; color:var(--text-secondary);" onclick="navigate('admin')">Administrator? Access Portal</button>
+      </div>
     </div>
   `;
 
@@ -430,8 +488,9 @@ async function handleLogin() {
     }
   } catch (err) {
     showError("login-error", err.message);
+  } finally {
+    setLoading("login-btn", false);
   }
-  setLoading("login-btn", false);
 }
 
 // ─── Submit Complaint Page ───────────────────────────────────
@@ -569,29 +628,233 @@ async function renderAdminPage(container) {
   if (!currentUser || currentUser.role !== "admin") return navigate("login");
 
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Admin Dashboard</h1>
-      <p>Review all submitted complaints</p>
-    </div>
-    <div id="admin-complaints-list">
-      <div class="empty-state">
-        <div class="loading-spinner" style="margin:0 auto;"></div>
-        <p style="margin-top:16px;">Loading complaints...</p>
+    <div class="admin-layout">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-logo">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="background:rgba(99,102,241,0.1); padding:6px; border-radius:8px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          AdminHub
+        </div>
+        <div class="sidebar-nav">
+          <div class="nav-item active" onclick="renderAdminDashboardView()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </div>
+          <div class="nav-item" onclick="renderAdminComplaints()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Complaints
+          </div>
+          <div class="nav-item" onclick="renderUserManagement()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Users
+          </div>
+        </div>
+        <div style="margin-top:auto;">
+          <div class="nav-item" onclick="handleLogout()" style="color:#ef4444;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Logout
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="admin-main">
+        <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:40px;">
+          <div>
+            <h1 style="font-size:1.8rem; font-weight:800; letter-spacing:-0.02em;">Welcome back, ${currentUser.name}!</h1>
+            <p style="color:var(--text-muted); font-size:0.95rem;">Here's what's happening on your platform today.</p>
+          </div>
+          <div style="display:flex; gap:16px;">
+            <div style="text-align:right;">
+              <div style="font-weight:700; font-size:0.9rem;">Administrator</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">${currentUser.email}</div>
+            </div>
+            <div style="width:40px; height:40px; background:var(--grad-purple); border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-weight:800;">
+              ${currentUser.name[0]}
+            </div>
+          </div>
+        </header>
+
+        <div id="admin-content-area">
+          <!-- Views will be injected here -->
+        </div>
       </div>
     </div>
   `;
 
+  renderAdminDashboardView();
+}
+
+async function renderAdminDashboardView() {
+  // Set active state in sidebar
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector('.nav-item:nth-child(1)').classList.add('active');
+
+  const area = document.getElementById("admin-content-area");
+  area.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card card-total" onclick="renderAdminComplaints('all')">
+        <p>Total Complaints</p>
+        <h3 id="stat-total">...</h3>
+        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      </div>
+      <div class="stat-card card-pending" onclick="renderAdminComplaints('pending')">
+        <p>Pending Review</p>
+        <h3 id="stat-pending">...</h3>
+        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      </div>
+      <div class="stat-card card-resolved" onclick="renderAdminComplaints('resolved')">
+        <p>Resolved</p>
+        <h3 id="stat-resolved">...</h3>
+        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+      </div>
+      <div class="stat-card card-users" onclick="renderUserManagement()">
+        <p>Active Users</p>
+        <h3 id="stat-users">...</h3>
+        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      </div>
+    </div>
+
+    <div id="admin-content-area">
+      <div class="empty-state">
+        <div class="empty-state-icon">📊</div>
+        <h3>Select a card above to manage data</h3>
+      </div>
+    </div>
+  `;
+
+  // Fetch stats
   try {
-    const data = await api("/admin/complaints");
-    renderComplaintsList(
-      document.getElementById("admin-complaints-list"),
-      data.complaints,
-      true
-    );
+    const stats = await api("/admin/stats");
+    document.getElementById("stat-total").innerText = stats.total ?? 0;
+    document.getElementById("stat-pending").innerText = stats.pending ?? 0;
+    document.getElementById("stat-resolved").innerText = stats.resolved ?? 0;
+    document.getElementById("stat-users").innerText = stats.users ?? 0;
   } catch (err) {
-    document.getElementById("admin-complaints-list").innerHTML = `
-      <div class="msg msg-error">${escapeHTML(err.message)}</div>
+    showToast("Stats Error: " + err.message, "error");
+  }
+}
+
+async function renderAdminComplaints(filter = "all") {
+  const area = document.getElementById("admin-content-area");
+  area.innerHTML = `<div style="text-align:center; padding:40px;">Loading ${filter} complaints...</div>`;
+  
+  try {
+    const { complaints } = await api("/admin/complaints");
+    let filtered = complaints;
+    if (filter !== "all") {
+      filtered = complaints.filter(c => c.status === filter);
+    }
+
+    if (filtered.length === 0) {
+      area.innerHTML = `<div class="empty-state"><h3>No ${filter} complaints found.</h3></div>`;
+      return;
+    }
+    area.innerHTML = `
+      <h2 style="margin-bottom:20px; font-size:1.2rem;">${filter.toUpperCase()} COMPLAINTS</h2>
+      <div class="complaints-list">
+        ${filtered.map(c => `
+          <div class="complaint-card">
+            <div style="display:flex; justify-content:space-between; align-items:start;">
+              <div class="status-badge status-${c.status}">${c.status}</div>
+              <div style="text-align:right; font-size:0.8rem; color:var(--text-muted);">
+                ${escapeHTML(c.user_name)} (${escapeHTML(c.user_email)})
+              </div>
+            </div>
+            <div class="complaint-section">
+              <div class="complaint-section-label">ID: ${c.id}</div>
+              <div class="complaint-section-text">${escapeHTML(c.complaint_text)}</div>
+            </div>
+            ${c.status === 'pending' ? `
+              <button class="btn btn-primary btn-sm" onclick="showResolutionModal('${c.id}', '${encodeURIComponent(c.complaint_text)}')">Resolve Now</button>
+            ` : `
+              <div class="resolution-box">
+                <div class="resolution-label" style="display:flex; justify-content:space-between; align-items:center;">
+                  Resolution
+                  <button class="btn btn-ghost btn-sm" style="color:var(--warning); padding:4px 8px; font-size:0.75rem; border:1px solid var(--warning);" onclick="handleReopen('${c.id}')">Reopen</button>
+                </div>
+                <div class="complaint-section-text">${escapeHTML(c.resolution_text)}</div>
+              </div>
+            `}
+          </div>
+        `).join("")}
+      </div>
     `;
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+}
+
+async function showResolutionModal(id, encodedText) {
+  const complaintText = decodeURIComponent(encodedText);
+  
+  // Open modal with loading state
+  openModal(`
+    <div class="modal-header">
+      <h3 style="margin:0;">Resolve Complaint</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="complaint-section">
+        <div class="complaint-section-label">Original Complaint</div>
+        <div class="complaint-section-text" style="font-style:italic;">"${escapeHTML(complaintText)}"</div>
+      </div>
+      <div class="form-group" style="margin-top:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <label class="form-label" style="margin:0;">Resolution Message</label>
+          <span id="ai-status" style="font-size:0.75rem; color:var(--primary);">✨ AI is generating suggestion...</span>
+        </div>
+        <textarea id="modal-res-input" class="input-field" style="min-height:150px;" placeholder="Writing resolution..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-submit-btn" onclick="handleResolve('${id}')">Submit & Send Email</button>
+    </div>
+  `);
+
+  // Automatically fetch AI suggestion
+  try {
+    const { suggestion } = await api(`/admin/complaints/${id}/ai-suggest`, { method: "POST" });
+    document.getElementById("modal-res-input").value = suggestion;
+    document.getElementById("ai-status").innerText = "✨ AI suggestion ready!";
+  } catch (err) {
+    document.getElementById("ai-status").innerText = "❌ AI suggestion failed.";
+    document.getElementById("modal-res-input").placeholder = "Enter your resolution manually...";
+  }
+}
+
+async function handleResolve(id) {
+  const text = document.getElementById(`modal-res-input`).value.trim();
+  if (!text) return showToast("Please enter a resolution message", "error");
+  
+  setLoading("modal-submit-btn", true);
+  try {
+    await api(`/admin/complaints/${id}/resolve`, {
+      method: "PATCH",
+      body: JSON.stringify({ resolution_text: text })
+    });
+    showToast("Complaint resolved and email sent!");
+    closeModal();
+    renderAdminComplaints(); // Refresh admin list
+  } catch (err) {
+    showToast(err.message, "error");
+  } finally {
+    setLoading("modal-submit-btn", false);
+  }
+}
+
+async function handleReopen(id) {
+  if (!confirm("Are you sure you want to reopen this complaint? It will be marked as pending again.")) return;
+  
+  try {
+    await api(`/admin/complaints/${id}/reopen`, {
+      method: "PATCH"
+    });
+    showToast("Complaint reopened successfully!");
+    renderAdminComplaints(); // Refresh admin list
+  } catch (err) {
+    showToast(err.message, "error");
   }
 }
 
@@ -652,6 +915,143 @@ function renderComplaintsList(container, complaints, showUser) {
   `
     )
     .join("");
+}
+
+async function renderUserManagement() {
+  const area = document.getElementById("admin-content-area");
+  area.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; animation: fadeSlideUp 0.3s ease;">
+      <h2 style="font-size:1.1rem; margin:0;">USER ACCOUNTS</h2>
+      <button class="btn btn-primary btn-sm" onclick="showCreateUserModal()">+ New User/Admin</button>
+    </div>
+    <div id="users-list-container" class="card" style="padding:0; border-radius:8px; overflow:hidden;">
+      <div style="text-align:center; padding:40px; color:var(--text-muted);">Loading user database...</div>
+    </div>
+  `;
+
+  try {
+    const { users } = await api("/admin/users");
+    const list = document.getElementById("users-list-container");
+    
+    list.innerHTML = `
+      <table class="mgmt-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>
+                <div style="font-weight:600;">${escapeHTML(u.name)}</div>
+                <div style="font-size:0.7rem; color:var(--text-muted);">ID: ${u.id.substring(0, 8)}...</div>
+              </td>
+              <td>${escapeHTML(u.email)}</td>
+              <td><span class="role-badge role-${u.role}">${u.role}</span></td>
+              <td style="text-align:right;">
+                <button class="btn btn-ghost btn-sm" onclick="showEditUserModal('${u.id}', '${escapeHTML(u.name)}', '${u.role}')">Edit</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--error);" onclick="handleDeleteUser('${u.id}')">Delete</button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+}
+
+function showCreateUserModal() {
+  openModal(`
+    <div class="modal-header"><h3>Create New Account</h3><button class="btn btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Full Name</label><input id="mu-name" class="input-field"></div>
+      <div class="form-group"><label class="form-label">Email</label><input id="mu-email" class="input-field"></div>
+      <div class="form-group"><label class="form-label">Password</label><input id="mu-pass" type="password" class="input-field"></div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select id="mu-role" class="input-field" style="background:var(--bg-input);">
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="btn-create-u" onclick="handleCreateUser()">Create User</button>
+    </div>
+  `);
+}
+
+async function handleCreateUser() {
+  const name = document.getElementById("mu-name").value;
+  const email = document.getElementById("mu-email").value;
+  const password = document.getElementById("mu-pass").value;
+  const role = document.getElementById("mu-role").value;
+
+  setLoading("btn-create-u", true);
+  try {
+    await api("/admin/users", {
+      method: "POST",
+      body: JSON.stringify({ name, email, password, role })
+    });
+    showToast("User created!");
+    closeModal();
+    renderUserManagement();
+    renderAdminDashboard(document.getElementById("app"));
+  } catch (err) { showToast(err.message, "error"); }
+  finally { setLoading("btn-create-u", false); }
+}
+
+function showEditUserModal(id, name, role) {
+  openModal(`
+    <div class="modal-header"><h3>Edit User</h3><button class="btn btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Name</label><input id="eu-name" value="${name}" class="input-field"></div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select id="eu-role" class="input-field" style="background:var(--bg-input);">
+          <option value="user" ${role === 'user' ? 'selected' : ''}>User</option>
+          <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="btn-edit-u" onclick="handleEditUser('${id}')">Save Changes</button>
+    </div>
+  `);
+}
+
+async function handleEditUser(id) {
+  const name = document.getElementById("eu-name").value;
+  const role = document.getElementById("eu-role").value;
+  setLoading("btn-edit-u", true);
+  try {
+    await api(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, role })
+    });
+    showToast("User updated");
+    closeModal();
+    renderUserManagement();
+  } catch (err) { showToast(err.message, "error"); }
+  finally { setLoading("btn-edit-u", false); }
+}
+
+async function handleDeleteUser(id) {
+  if (!confirm("Are you sure?")) return;
+  try {
+    await api(`/admin/users/${id}`, { method: "DELETE" });
+    showToast("User deleted");
+    renderUserManagement();
+    renderAdminDashboard(document.getElementById("app"));
+  } catch (err) { showToast(err.message, "error"); }
 }
 
 // ─── Init ────────────────────────────────────────────────────

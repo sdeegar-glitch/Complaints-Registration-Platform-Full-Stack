@@ -20,6 +20,9 @@ const complaints = pgTable("complaints", {
   complaint_text: text("complaint_text").notNull(),
   ai_question: text("ai_question"),
   user_answer: text("user_answer"),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  resolution_text: text("resolution_text"),
+  resolved_at: timestamp("resolved_at"),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
