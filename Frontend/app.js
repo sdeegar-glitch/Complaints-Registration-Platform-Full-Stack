@@ -7,7 +7,7 @@
    • Same-origin (served by Express):  ""   (empty string)
    • Separate dev server:              "http://localhost:3000"
    ──────────────────────────────────────────────────────────── */
-const BACKEND_BASE_URL = window.location.port === "3000" ? "" : "http://localhost:3000";
+const BACKEND_BASE_URL = window.location.port === "3000" ? "" : "https://complaints-registration-platform-full-8wjq.onrender.com";
 const API = `${BACKEND_BASE_URL}/api`;
 
 // ─── State ───────────────────────────────────────────────────
@@ -18,7 +18,7 @@ let currentPage = null;
 async function api(path, options = {}) {
   const headers = { "Content-Type": "application/json" };
   const token = localStorage.getItem("token");
-  
+
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -92,10 +92,10 @@ function escapeHTML(str) {
 // ─── Navigation ──────────────────────────────────────────────
 function navigate(page) {
   currentPage = page;
-  
+
   const navbar = document.getElementById("navbar");
   const mainContent = document.getElementById("app");
-  
+
   if (page === "admin") {
     if (navbar) navbar.classList.add("hidden-admin");
     if (mainContent) mainContent.classList.add("admin-mode");
@@ -103,7 +103,7 @@ function navigate(page) {
     if (navbar) navbar.classList.remove("hidden-admin");
     if (mainContent) mainContent.classList.remove("admin-mode");
   }
-  
+
   renderNavbar();
   renderPage();
 }
@@ -162,7 +162,7 @@ function renderPage() {
 // ─── Session Check ───────────────────────────────────────────
 async function checkSession() {
   const token = localStorage.getItem("token");
-  
+
   if (!token) {
     currentUser = null;
     navigate("login");
@@ -738,7 +738,7 @@ async function renderAdminDashboardView() {
 async function renderAdminComplaints(filter = "all") {
   const area = document.getElementById("admin-content-area");
   area.innerHTML = `<div style="text-align:center; padding:40px;">Loading ${filter} complaints...</div>`;
-  
+
   try {
     const { complaints } = await api("/admin/complaints");
     let filtered = complaints;
@@ -787,7 +787,7 @@ async function renderAdminComplaints(filter = "all") {
 
 async function showResolutionModal(id, encodedText) {
   const complaintText = decodeURIComponent(encodedText);
-  
+
   // Open modal with loading state
   openModal(`
     <div class="modal-header">
@@ -827,7 +827,7 @@ async function showResolutionModal(id, encodedText) {
 async function handleResolve(id) {
   const text = document.getElementById(`modal-res-input`).value.trim();
   if (!text) return showToast("Please enter a resolution message", "error");
-  
+
   setLoading("modal-submit-btn", true);
   try {
     await api(`/admin/complaints/${id}/resolve`, {
@@ -846,7 +846,7 @@ async function handleResolve(id) {
 
 async function handleReopen(id) {
   if (!confirm("Are you sure you want to reopen this complaint? It will be marked as pending again.")) return;
-  
+
   try {
     await api(`/admin/complaints/${id}/reopen`, {
       method: "PATCH"
@@ -865,11 +865,10 @@ function renderComplaintsList(container, complaints, showUser) {
       <div class="empty-state">
         <div class="empty-state-icon">📭</div>
         <h3>No Complaints Yet</h3>
-        <p>${
-          showUser
-            ? "No complaints have been submitted by any users."
-            : "You haven't submitted any complaints yet."
-        }</p>
+        <p>${showUser
+        ? "No complaints have been submitted by any users."
+        : "You haven't submitted any complaints yet."
+      }</p>
       </div>
     `;
     return;
@@ -882,10 +881,9 @@ function renderComplaintsList(container, complaints, showUser) {
       (c) => `
     <div class="complaint-card">
       <div class="complaint-meta">
-        ${
-          showUser
-            ? `<span class="complaint-user-info">${escapeHTML(c.user_name)} · ${escapeHTML(c.user_email)}</span>`
-            : `<span></span>`
+        ${showUser
+          ? `<span class="complaint-user-info">${escapeHTML(c.user_name)} · ${escapeHTML(c.user_email)}</span>`
+          : `<span></span>`
         }
         <span class="complaint-date">${formatDate(c.created_at)}</span>
       </div>
@@ -893,24 +891,22 @@ function renderComplaintsList(container, complaints, showUser) {
         <div class="complaint-section-label">Complaint</div>
         <div class="complaint-section-text">${escapeHTML(c.complaint_text)}</div>
       </div>
-      ${
-        c.ai_question
+      ${c.ai_question
           ? `
       <div class="complaint-section">
         <div class="complaint-section-label">AI Follow-up Question</div>
         <div class="complaint-section-text ai-text">${escapeHTML(c.ai_question)}</div>
       </div>`
           : ""
-      }
-      ${
-        c.user_answer
+        }
+      ${c.user_answer
           ? `
       <div class="complaint-section">
         <div class="complaint-section-label">User's Answer</div>
         <div class="complaint-section-text">${escapeHTML(c.user_answer)}</div>
       </div>`
           : ""
-      }
+        }
     </div>
   `
     )
@@ -932,7 +928,7 @@ async function renderUserManagement() {
   try {
     const { users } = await api("/admin/users");
     const list = document.getElementById("users-list-container");
-    
+
     list.innerHTML = `
       <table class="mgmt-table">
         <thead>
