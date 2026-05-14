@@ -49,14 +49,19 @@ router.post("/send-otp", async (req, res) => {
       });
     }
 
-    // Send OTP email in background
-    sendOtpEmail(email, otp).catch(e => console.error("BG Email Error:", e));
-    console.log(`📡 Sending OTP [${otp}] to ${email} (Background)...`);
+    // Send OTP email synchronously so we can return an error if it fails
+    try {
+      await sendOtpEmail(email, otp);
+      console.log(`📡 Sending OTP [${otp}] to ${email} (Success)`);
+      res.json({ message: "OTP sent successfully to your email." });
+    } catch (emailErr) {
+      console.error("Email sending failed:", emailErr);
+      return res.status(500).json({ error: "Failed to send OTP email. Please check server configuration." });
+    }
 
-    res.json({ message: "OTP sent successfully to your email." });
   } catch (err) {
     console.error("send-otp error:", err);
-    res.status(500).json({ error: "Failed to send OTP. Please try again." });
+    res.status(500).json({ error: "An unexpected error occurred. Please try again." });
   }
 });
 
