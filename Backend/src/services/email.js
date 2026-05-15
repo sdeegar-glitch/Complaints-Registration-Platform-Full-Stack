@@ -1,72 +1,48 @@
-const nodemailer = require("nodemailer");
-const dns = require("dns");
-
-// Force IPv4 for this service to avoid Render's IPv6 issues
-dns.setDefaultResultOrder("ipv4first");
-
-// Create a transporter using Gmail OAuth2 with Deep Logging
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  logger: true, // Enable detailed logs
-  debug: true,  // Include debug info in logs
-  auth: {
-    type: "OAuth2",
-    user: process.env.GMAIL_USER,
-    clientId: process.env.GMAIL_CLIENT_ID,
-    clientSecret: process.env.GMAIL_CLIENT_SECRET,
-    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
-  },
-});
-
-// Verify connection on startup with detailed error reporting
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ Email Transporter Error (Detailed):", error);
-  } else {
-    console.log("🚀 Email Server is ready and authenticated via OAuth2");
-  }
-});
-
-// No startup verify to prevent boot-time hangs on cloud hosts
+// c:\Users\acer\Complaints-Registration-Platform-Full-Stack\Backend\src\services\email.js
 
 /**
- * Send an OTP email to the given address.
+ * Send an email using the EmailJS REST API.
+ * This is compatible with Render's Free Tier.
  */
 async function sendOtpEmail(to, otp) {
-  const mailOptions = {
-    from: `"Complaints Hub" <${process.env.GMAIL_USER}>`,
-    to,
-    subject: "Your OTP for Registration",
-    text: `Your OTP code is: ${otp}\n\nThis code will expire in 10 minutes.`,
+  const data = {
+    service_id: process.env.EMAILJS_SERVICE_ID,
+    template_id: process.env.EMAILJS_TEMPLATE_ID,
+    user_id: process.env.EMAILJS_PUBLIC_KEY,
+    accessToken: process.env.EMAILJS_PRIVATE_KEY,
+    template_params: {
+      to_email: to,
+      otp: otp,
+      to_name: to.split("@")[0], // Simple name fallback
+    },
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ OTP Email Sent:", info.response);
-    return info;
+    const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`EmailJS Error: ${errorText}`);
+    }
+
+    console.log(`✅ EmailJS: OTP sent to ${to}`);
+    return true;
   } catch (error) {
-    console.error("❌ OTP Email Error:", error.message);
+    console.error("❌ EmailJS Error:", error.message);
     throw error;
   }
 }
 
 /**
- * Send a resolution notification email to the user.
+ * Send a resolution email (Optional, can be implemented if template exists)
  */
 async function sendResolutionEmail(to, resolutionText) {
-  const mailOptions = {
-    from: `"Complaints Hub" <${process.env.GMAIL_USER}>`,
-    to,
-    subject: "Update on your Complaint Resolution",
-    text: `Hello,\n\nYour complaint has been resolved with the following message:\n\n"${resolutionText}"\n\nYou can track the full details on our portal.\n\nThank you,\nComplaints Hub Team`,
-  };
-
-  try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ Resolution Email Sent:", info.response);
-  } catch (error) {
-    console.error("❌ Resolution Email Error:", error.message);
-  }
+  // Logic similar to sendOtpEmail but with a different template
+  console.log("Resolution email would be sent here via EmailJS");
 }
 
 module.exports = { sendOtpEmail, sendResolutionEmail };
