@@ -43,7 +43,10 @@ async function api(path, options = {}) {
     throw new Error("Invalid response from server.");
   }
 
-  if (!res.ok) throw new Error(data.error || "Something went wrong.");
+  if (!res.ok) {
+    const errorMsg = data.details ? `${data.error} (${data.details})` : (data.error || "Something went wrong.");
+    throw new Error(errorMsg);
+  }
   return data;
 }
 
