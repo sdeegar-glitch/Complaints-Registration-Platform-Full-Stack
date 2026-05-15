@@ -8,9 +8,17 @@
 }
 
 body {
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #F8FAFC;
+}
+
+@media (min-width: 1024px) {
+  body {
+    height: 100vh;
+    overflow: hidden;
+  }
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -205,4 +213,79 @@ body {
 
 .nav-link:hover::after {
   width: 100%;
+}
+
+/* ─── Responsive Command Scaling ────────────────────────────── */
+@media (max-width: 768px) {
+  .medical-card-bright {
+    border-radius: 24px;
+    padding: 1.5rem !important;
+  }
+  
+  .font-display.text-5xl {
+    font-size: 2.5rem !important;
+  }
+  
+  .font-display.text-4xl {
+    font-size: 2rem !important;
+  }
+  
+  .btn-large {
+    padding: 1rem 1.5rem;
+    font-size: 0.75rem;
+    width: 100%;
+  }
+  
+  .grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .p-24, .py-24, .p-32 {
+    padding: 1.5rem !important;
+  }
+  
+  .mt-24 {
+    mt-8 !important;
+  }
+  
+  .max-w-xl, .max-w-2xl, .max-w-7xl {
+    max-width: 100% !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+  
+  table thead {
+    display: none;
+  }
+  
+  table, tbody, tr, td {
+    display: block;
+    width: 100%;
+  }
+  
+  tr {
+    margin-bottom: 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: white;
+    padding: 1rem;
+  }
+  
+  td {
+    padding: 0.5rem 0 !important;
+    text-align: left !important;
+    border: none !important;
+  }
+  
+  td::before {
+    content: attr(data-label);
+    float: left;
+    font-weight: 900;
+    text-transform: uppercase;
+    font-size: 0.6rem;
+    color: #94a3b8;
+    margin-right: 1rem;
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
 }

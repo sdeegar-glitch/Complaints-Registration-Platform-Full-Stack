@@ -673,18 +673,18 @@ function renderAdminComplaints(container, complaints) {
       <tbody class="divide-y divide-slate-100">
         ${complaints.map(c => `
           <tr class="hover:bg-primary/5 transition-all">
-            <td class="px-12 py-8 font-black text-primary">#${c.id.slice(0,8).toUpperCase()}</td>
-            <td class="px-12 py-8 font-bold">${escapeHTML(c.user_name)}</td>
-            <td class="px-12 py-8">
+            <td class="px-12 py-8 font-black text-primary" data-label="ID">#${c.id.slice(0,8).toUpperCase()}</td>
+            <td class="px-12 py-8 font-bold" data-label="Citizen">${escapeHTML(c.user_name)}</td>
+            <td class="px-12 py-8" data-label="Status">
               <span class="px-4 py-1 rounded-full text-[10px] font-black uppercase ${c.status === 'resolved' ? 'bg-green-50 text-green-600' : c.status === 'investigating' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}">
                 ${c.status}
               </span>
             </td>
-            <td class="px-12 py-8 text-right flex justify-end gap-4">
+            <td class="px-12 py-8 text-right flex justify-end gap-4" data-label="Command">
               ${c.status === 'resolved' ? `
-                <button onclick="handleReopenComplaint('${c.id}')" class="text-secondary font-black text-xs uppercase hover:underline">Reopen Investigation</button>
+                <button onclick="handleReopenComplaint('${c.id}')" class="text-secondary font-black text-xs uppercase hover:underline">Reopen</button>
               ` : ''}
-              <button onclick="showResolutionModal('${c.id}', '${escapeHTML(c.resolution_text || "")}', '${c.status}')" class="text-primary font-black uppercase text-xs">Dispatch Command</button>
+              <button onclick="showResolutionModal('${c.id}', '${escapeHTML(c.resolution_text || "")}', '${c.status}')" class="text-primary font-black uppercase text-xs">Dispatch</button>
             </td>
           </tr>
         `).join('')}
@@ -864,10 +864,10 @@ async function renderUserManagement() {
         <tbody class="divide-y divide-slate-100">
           ${data.users.map(u => `
             <tr class="hover:bg-secondary/5 transition-all">
-              <td class="px-12 py-8 font-black text-slate-900">${escapeHTML(u.name)}</td>
-              <td class="px-12 py-8 font-bold text-slate-500">${escapeHTML(u.email)}</td>
-              <td class="px-12 py-8"><span class="px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-secondary text-white' : 'bg-slate-100 text-slate-500'}">${u.role}</span></td>
-              <td class="px-12 py-8 text-right flex justify-end gap-4">
+              <td class="px-12 py-8 font-black text-slate-900" data-label="Official">${escapeHTML(u.name)}</td>
+              <td class="px-12 py-8 font-bold text-slate-500" data-label="Email">${escapeHTML(u.email)}</td>
+              <td class="px-12 py-8" data-label="Role"><span class="px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-secondary text-white' : 'bg-slate-100 text-slate-500'}">${u.role}</span></td>
+              <td class="px-12 py-8 text-right flex justify-end gap-4" data-label="Action">
                 <button onclick="showEditUserModal('${u.id}', '${escapeHTML(u.name)}', '${u.role}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-primary transition-all"><i class="fa-solid fa-pen-to-square"></i></button>
                 <button onclick="handleDeleteUser('${u.id}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-secondary transition-all"><i class="fa-solid fa-trash-can"></i></button>
               </td>
