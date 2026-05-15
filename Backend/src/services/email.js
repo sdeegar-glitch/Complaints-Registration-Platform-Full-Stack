@@ -1,4 +1,8 @@
 const nodemailer = require("nodemailer");
+const dns = require("dns");
+
+// Force IPv4 for this service to avoid Render's IPv6 issues
+dns.setDefaultResultOrder("ipv4first");
 
 // Create a transporter using Gmail with explicit SMTP settings
 const transporter = nodemailer.createTransport({
