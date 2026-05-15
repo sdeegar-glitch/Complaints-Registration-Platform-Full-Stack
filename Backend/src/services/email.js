@@ -4,9 +4,11 @@ const dns = require("dns");
 // Force IPv4 for this service to avoid Render's IPv6 issues
 dns.setDefaultResultOrder("ipv4first");
 
-// Create a transporter using Gmail OAuth2 (Works over HTTP, not blocked by Render)
+// Create a transporter using Gmail OAuth2 with Deep Logging
 const transporter = nodemailer.createTransport({
   service: "gmail",
+  logger: true, // Enable detailed logs
+  debug: true,  // Include debug info in logs
   auth: {
     type: "OAuth2",
     user: process.env.GMAIL_USER,
@@ -16,12 +18,12 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Verify connection on startup
+// Verify connection on startup with detailed error reporting
 transporter.verify((error, success) => {
   if (error) {
-    console.error("❌ Email Transporter Error:", error.message);
+    console.error("❌ Email Transporter Error (Detailed):", error);
   } else {
-    console.log("🚀 Email Server is ready to take messages");
+    console.log("🚀 Email Server is ready and authenticated via OAuth2");
   }
 });
 
