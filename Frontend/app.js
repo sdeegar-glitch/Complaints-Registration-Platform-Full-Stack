@@ -7,9 +7,7 @@
    • Same-origin (served by Express):  ""   (empty string)
    • Separate dev server:              "http://localhost:3000"
    ──────────────────────────────────────────────────────────── */
-const BACKEND_BASE_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") 
-  ? `http://${window.location.hostname}:3000` 
-  : "https://complaints-registration-platform-full-8wjq.onrender.com";
+const BACKEND_BASE_URL = "https://complaints-registration-platform-full-8wjq.onrender.com";
 const API = `${BACKEND_BASE_URL}/api`;
 
 // ─── State ───────────────────────────────────────────────────
