@@ -1,7 +1,7 @@
 let currentUser = null;
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? (window.location.port === '3000' ? '/api' : 'http://localhost:3000/api')
-  : '/api';
+  ? 'http://localhost:3000/api'
+  : 'https://complaints-registration-platform-full-8wjq.onrender.com/api';
 
 async function api(path, options = {}) {
   const token = localStorage.getItem("token");
