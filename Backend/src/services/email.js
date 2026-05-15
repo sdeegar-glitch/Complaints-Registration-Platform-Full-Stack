@@ -1,17 +1,12 @@
 const nodemailer = require("nodemailer");
 
-// Create a persistent transporter with connection pooling for speed
+// Create a persistent transporter using the Gmail service preset
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  service: "gmail",
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
-  pool: true, // Reuses connections instead of closing them
-  maxConnections: 5,
-  maxMessages: 100,
 });
 
 // Verify connection on startup
