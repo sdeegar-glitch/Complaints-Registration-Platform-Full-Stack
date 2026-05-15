@@ -1,12 +1,25 @@
 const nodemailer = require("nodemailer");
 
-// Create a transporter using Gmail service
+// Create a transporter using Gmail with explicit SMTP settings
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true, // Use SSL
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
+});
+
+// Verify connection on startup
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ Email Transporter Error:", error.message);
+  } else {
+    console.log("🚀 Email Server is ready to take messages");
+  }
 });
 
 // No startup verify to prevent boot-time hangs on cloud hosts
