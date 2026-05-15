@@ -85,7 +85,9 @@ router.post("/register", async (req, res) => {
       return res.status(409).json({ error: "This account is already registered." });
     }
 
+    console.log(`🔐 Verifying OTP for ${email}: Received [${otp}], DB has [${user.otp}]`);
     if (user.otp !== otp) {
+      console.log("❌ OTP Mismatch!");
       return res.status(400).json({ error: "Invalid OTP. Please check and try again." });
     }
 
