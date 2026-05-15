@@ -1,5 +1,11 @@
 require("dotenv").config();
 
+console.log("📍 RUNNING FILE:", __filename);
+console.log("*****************************************");
+console.log("🚀 COMPLAINTS HUB BACKEND IS STARTING!");
+console.log("📧 MODE: EMAILJS API (SMTP IS DISABLED)");
+console.log("*****************************************");
+
 // Force IPv4 DNS resolution
 const dns = require("dns");
 dns.setDefaultResultOrder("ipv4first");

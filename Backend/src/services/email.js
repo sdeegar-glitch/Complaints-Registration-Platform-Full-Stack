@@ -14,7 +14,10 @@ async function sendOtpEmail(to, otp) {
       template_params: {
         to_email: to,
         otp: otp,
-        user_email: to, // Added common variations just in case
+        user_email: to,
+        email: to,
+        recipient: to,
+        send_to: to,
         message: `Your OTP is ${otp}`,
       },
     });
