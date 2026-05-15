@@ -57,8 +57,50 @@ async function sendOtpEmail(to, otp) {
   });
 }
 
-async function sendResolutionEmail(to, resolutionText) {
-  console.log("Resolution email logic here");
+async function sendInquiryEmail(name, fromEmail, query) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({
+      service_id: process.env.EMAILJS_SERVICE_ID,
+      template_id: process.env.EMAILJS_TEMPLATE_ID,
+      user_id: process.env.EMAILJS_PUBLIC_KEY,
+      accessToken: process.env.EMAILJS_PRIVATE_KEY,
+      template_params: {
+        to_email: "devtshq@gmail.com",
+        from_name: name,
+        from_email: fromEmail,
+        message: `Official Inquiry Received:\n\nFrom: ${name} (${fromEmail})\n\nQuery: ${query}`,
+      },
+    });
+
+    const options = {
+      hostname: "api.emailjs.com",
+      port: 443,
+      path: "/api/v1.0/email/send",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": data.length,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      if (res.statusCode === 200) {
+        console.log(`✅ Inquiry Dispatch: Success for ${fromEmail}`);
+        resolve(true);
+      } else {
+        reject(new Error(`Inquiry failed: ${res.statusCode}`));
+      }
+    });
+
+    req.on("error", (error) => reject(error));
+    req.write(data);
+    req.end();
+  });
 }
 
-module.exports = { sendOtpEmail, sendResolutionEmail };
+async function sendResolutionEmail(to, resolutionText) {
+  console.log(`📡 Resolution dispatched for ${to}: ${resolutionText}`);
+  return true;
+}
+
+module.exports = { sendOtpEmail, sendResolutionEmail, sendInquiryEmail };

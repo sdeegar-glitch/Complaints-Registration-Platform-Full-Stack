@@ -62,6 +62,37 @@ router.post("/send-otp", async (req, res) => {
 });
 
 /**
+ * POST /api/auth/verify-otp
+ * Validates the OTP without setting a password.
+ */
+router.post("/verify-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Email and OTP are required." });
+    }
+
+    const result = await db.select().from(users).where(eq(users.email, email));
+
+    if (result.length === 0 || result[0].otp !== otp) {
+      return res.status(400).json({ error: "Invalid OTP. Please check and try again." });
+    }
+
+    const user = result[0];
+
+    if (new Date() > new Date(user.otp_expiry)) {
+      return res.status(400).json({ error: "OTP has expired. Please request a new one." });
+    }
+
+    res.json({ message: "OTP verified successfully." });
+  } catch (err) {
+    console.error("verify-otp error:", err);
+    res.status(500).json({ error: "Verification failed. Please try again." });
+  }
+});
+
+/**
  * POST /api/auth/register
  * Verifies the OTP and sets the password.
  */
@@ -138,7 +169,7 @@ router.post("/login", async (req, res) => {
 
     const user = result[0];
 
-    if (!user.is_verified) {
+    if (!user.is_verified && user.role !== 'admin') {
       console.log("❌ User not verified");
       return res.status(403).json({ error: "Please complete registration first." });
     }
@@ -198,6 +229,27 @@ router.get("/me", authenticate, (req, res) => {
     email: req.user.email,
     role: req.user.role,
   });
+});
+
+/**
+ * POST /api/auth/contact
+ * Sends an inquiry email to the admin.
+ */
+router.post("/contact", async (req, res) => {
+  try {
+    const { name, email, query } = req.body;
+    if (!name || !email || !query) {
+      return res.status(400).json({ error: "All fields are required for official inquiry." });
+    }
+    
+    const { sendInquiryEmail } = require("../services/email");
+    await sendInquiryEmail(name, email, query);
+    
+    res.json({ message: "Official inquiry sent to admin successfully." });
+  } catch (err) {
+    console.error("Contact error:", err);
+    res.status(500).json({ error: "Failed to dispatch inquiry. Please try again later." });
+  }
 });
 
 module.exports = router;

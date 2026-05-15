@@ -168,6 +168,36 @@ router.patch("/admin/complaints/:id/resolve", authenticate, requireAdmin, async 
 });
 
 /**
+ * PATCH /api/admin/complaints/:id/status
+ * Updates the status of a complaint (admin only).
+ */
+router.patch("/admin/complaints/:id/status", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: "Status is required." });
+    }
+
+    const result = await db
+      .update(complaints)
+      .set({ status })
+      .where(eq(complaints.id, id))
+      .returning();
+
+    if (result.length === 0) {
+      return res.status(404).json({ error: "Complaint not found." });
+    }
+
+    res.json({ message: "Status updated.", complaint: result[0] });
+  } catch (err) {
+    console.error("Status update error:", err);
+    res.status(500).json({ error: "Failed to update status." });
+  }
+});
+
+/**
  * PATCH /api/admin/complaints/:id/reopen
  * Reopens a resolved complaint (admin only).
  */

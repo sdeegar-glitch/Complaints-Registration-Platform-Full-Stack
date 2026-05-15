@@ -1,998 +1,903 @@
-/* ============================================================
-   COMPLAINTS REGISTRATION PLATFORM — CLIENT-SIDE SPA
-   ============================================================ */
+let currentUser = null;
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? (window.location.port === '3000' ? '/api' : 'http://localhost:3000/api')
+  : '/api';
 
-/* ── Backend Base URL ──────────────────────────────────────────
-   Change this if the backend runs on a different host/port.
-   • Same-origin (served by Express):  ""   (empty string)
-   • Separate dev server:              "http://localhost:3000"
-   ──────────────────────────────────────────────────────────── */
-const BACKEND_BASE_URL = "https://complaints-registration-platform-full-8wjq.onrender.com";
-const API = `${BACKEND_BASE_URL}/api`;
-
-// ─── State ───────────────────────────────────────────────────
-let currentUser = null; // { name, email, role }
-let currentPage = null;
-
-// ─── Helpers ─────────────────────────────────────────────────
 async function api(path, options = {}) {
-  const headers = { "Content-Type": "application/json" };
   const token = localStorage.getItem("token");
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...options.headers,
+  };
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API}${path}`, {
-    credentials: "include",
-    headers,
-    ...options,
-  });
-
-  // Handle the initial session check silently
-  if (res.status === 401 && path === "/auth/me") {
-    throw new Error("UNAUTHORIZED_SILENT");
-  }
-
+  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  
   let data;
-  try {
-    data = await res.json();
-  } catch (e) {
-    // If response is not JSON (like a 502 HTML page from Render)
-    if (!res.ok) throw new Error(`Server Error (${res.status}). Please try again later.`);
-    throw new Error("Invalid response from server.");
+  const contentType = res.headers.get("content-type");
+  if (contentType && contentType.includes("application/json")) {
+    const text = await res.text();
+    data = text ? JSON.parse(text) : {};
+  } else {
+    const text = await res.text();
+    data = { message: text };
   }
 
   if (!res.ok) {
-    const errorMsg = data.details ? `${data.error} (${data.details})` : (data.error || "Something went wrong.");
+    const errorMsg = data.error || data.message || `Authority Error ${res.status}: ${res.statusText}`;
     throw new Error(errorMsg);
   }
   return data;
 }
 
-function showToast(message, type = "success") {
-  const container = document.getElementById("toast-container");
-  if (!container) return;
-  const toast = document.createElement("div");
-  toast.className = `toast toast-${type}`;
-  toast.textContent = message;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.classList.add("toast-exit");
-    setTimeout(() => toast.remove(), 300);
-  }, 3500);
-}
-
-// ─── Modal Management ─────────────────────────────────────────
-function openModal(contentHtml) {
-  const container = document.getElementById("modal-container");
-  container.innerHTML = `<div class="modal-content">${contentHtml}</div>`;
-  container.style.display = "flex";
-  document.body.style.overflow = "hidden"; // Prevent scrolling
-}
-
-function closeModal() {
-  const container = document.getElementById("modal-container");
-  container.style.display = "none";
-  container.innerHTML = "";
-  document.body.style.overflow = "auto";
-}
-
-// Close modal on click outside
-window.addEventListener("click", (e) => {
-  const container = document.getElementById("modal-container");
-  if (e.target === container) closeModal();
-});
-
-function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function escapeHTML(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-// ─── Navigation ──────────────────────────────────────────────
-function navigate(page) {
-  currentPage = page;
-
-  const navbar = document.getElementById("navbar");
-  const mainContent = document.getElementById("app");
-
-  if (page === "admin") {
-    if (navbar) navbar.classList.add("hidden-admin");
-    if (mainContent) mainContent.classList.add("admin-mode");
-  } else {
-    if (navbar) navbar.classList.remove("hidden-admin");
-    if (mainContent) mainContent.classList.remove("admin-mode");
-  }
-
-  renderNavbar();
-  renderPage();
-}
-
-function renderNavbar() {
-  const actions = document.getElementById("nav-actions");
-  if (!currentUser) {
-    actions.innerHTML = `
-      <button class="btn btn-ghost" onclick="navigate('track')">Track Complaint</button>
-      <button class="btn btn-ghost" id="nav-login-btn" onclick="navigate('login')">Log In</button>
-      <button class="btn btn-primary" id="nav-register-btn" onclick="navigate('register')" style="padding:8px 18px;font-size:0.85rem;">Sign Up</button>
-    `;
-  } else {
-    let links = "";
-    if (currentUser.role === "admin") {
-      links = `<button class="btn btn-ghost" id="nav-admin-btn" onclick="navigate('admin')">Admin Dashboard</button>`;
-    } else {
-      links = `
-        <button class="btn btn-ghost" id="nav-my-btn" onclick="navigate('my-complaints')">My Complaints</button>
-        <button class="btn btn-ghost" id="nav-submit-btn" onclick="navigate('submit')">New Complaint</button>
-      `;
-    }
-    actions.innerHTML = `
-      ${links}
-      <button class="btn btn-danger" id="nav-logout-btn" onclick="handleLogout()" style="padding:8px 18px;font-size:0.85rem;">Logout</button>
-    `;
-  }
-}
-
-function renderPage() {
+function navigate(page, params = {}) {
   const app = document.getElementById("app");
-  switch (currentPage) {
-    case "track":
-      renderTrackPage(app);
-      break;
-    case "register":
-      renderRegisterPage(app);
-      break;
-    case "login":
-      renderLoginPage(app);
-      break;
-    case "submit":
-      renderSubmitPage(app);
-      break;
-    case "my-complaints":
-      renderMyComplaintsPage(app);
-      break;
-    case "admin":
-      renderAdminPage(app);
-      break;
-    default:
-      renderLoginPage(app);
+  const mainView = document.getElementById("main-view");
+  const landingHero = document.getElementById("landing-hero");
+
+  // Reset UI
+  if (landingHero) landingHero.classList.add("hidden");
+  if (mainView) {
+    mainView.innerHTML = "";
+    mainView.classList.add("hidden");
   }
-}
 
-// ─── Session Check ───────────────────────────────────────────
-async function checkSession() {
-  const token = localStorage.getItem("token");
+  // Home logic
+  if (page === "home") {
+    if (landingHero) landingHero.classList.remove("hidden");
+    renderNavbar();
+    return;
+  }
 
-  if (!token) {
-    currentUser = null;
+  // Auth Guard
+  const publicPages = ["login", "register", "departments", "contact"];
+  if (!publicPages.includes(page) && !currentUser) {
     navigate("login");
     return;
   }
 
+  if (mainView) mainView.classList.remove("hidden");
+  renderNavbar();
+
+  switch (page) {
+    case "login": renderLoginPage(mainView); break;
+    case "register": renderRegisterPage(mainView); break;
+    case "submit": renderSubmitPage(mainView); break;
+    case "my-complaints": renderMyComplaintsPage(mainView); break;
+    case "track": renderTrackPage(mainView, params.id); break;
+    case "admin": renderAdminDashboard(mainView); break;
+    case "departments": renderDepartmentsPage(mainView); break;
+    case "contact": renderContactPage(mainView); break;
+    default: navigate("home");
+  }
+}
+
+function renderNavbar() {
+  const nav = document.getElementById("main-nav");
+  if (!nav) return;
+
+  const isLoggedIn = !!currentUser;
+  const isAdmin = currentUser?.role === "admin";
+
+  nav.innerHTML = `
+    <div class="max-w-7xl mx-auto px-8 h-full flex items-center justify-between">
+      <div class="flex items-center gap-12">
+        <a href="javascript:void(0)" onclick="navigate('home')" class="flex items-center gap-4 group">
+          <div class="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform">
+             <i class="fa-solid fa-shield-halved text-xl"></i>
+          </div>
+          <div class="font-display font-black text-2xl tracking-tighter text-slate-900">PoliceGrievance</div>
+        </a>
+        <div class="hidden md:flex items-center gap-8">
+          <a href="javascript:void(0)" onclick="navigate('home')" class="nav-link font-bold text-slate-500 hover:text-primary transition-colors">Home</a>
+          <a href="javascript:void(0)" onclick="navigate('departments')" class="nav-link font-bold text-slate-500 hover:text-primary transition-colors">Departments</a>
+          <a href="javascript:void(0)" onclick="navigate('contact')" class="nav-link font-bold text-slate-500 hover:text-primary transition-colors">Contact</a>
+        </div>
+      </div>
+      <div class="flex items-center gap-6">
+        ${isLoggedIn ? `
+          ${isAdmin ? `<a href="javascript:void(0)" onclick="navigate('admin')" class="btn btn-ghost text-secondary font-black">Director's Console</a>` : ''}
+          <a href="javascript:void(0)" onclick="navigate('my-complaints')" class="btn btn-ghost font-black">Dashboard</a>
+          <button onclick="handleLogout()" class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 hover:bg-secondary hover:text-white transition-all shadow-sm">
+            <i class="fa-solid fa-power-off"></i>
+          </button>
+        ` : `
+          <a href="javascript:void(0)" onclick="navigate('login')" class="font-black text-slate-900 hover:text-primary px-4">Sign In</a>
+          <button onclick="navigate('register')" class="bg-primary text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-primary/20 hover:scale-105 transition-all">Join Portal</button>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function showToast(msg, type = "success") {
+  const t = document.createElement("div");
+  t.className = `fixed bottom-10 right-10 z-[1000] px-8 py-4 rounded-2xl font-black text-white shadow-2xl animate-slide-up flex items-center gap-4 ${type === 'success' ? 'bg-primary' : 'bg-secondary'}`;
+  t.innerHTML = `
+    <i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-triangle-exclamation'}"></i>
+    ${msg}
+  `;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 500); }, 3000);
+}
+
+function escapeHTML(str) {
+  const p = document.createElement("p");
+  p.textContent = str;
+  return p.innerHTML;
+}
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ─── Authentication ──────────────────────────────────────────
+
+async function checkSession() {
+  const token = localStorage.getItem("token");
+  if (!token) { currentUser = null; navigate("home"); return; }
   try {
-    const data = await api("/auth/me");
-    currentUser = data;
-    if (currentUser.role === "admin") {
-      navigate("admin");
-    } else {
-      navigate("my-complaints");
-    }
+    currentUser = await api("/auth/me");
+    navigate("home");
   } catch (err) {
     localStorage.removeItem("token");
     currentUser = null;
-    navigate("login");
+    navigate("home");
   }
 }
 
-// ─── Logout ──────────────────────────────────────────────────
 async function handleLogout() {
-  try {
-    await api("/auth/logout", { method: "POST" });
-  } catch {
-    // Ignore
-  }
   localStorage.removeItem("token");
   currentUser = null;
-  showToast("Logged out successfully.");
-  navigate("login");
+  showToast("Session Terminated Securely");
+  navigate("home");
 }
 
-// ─── Register Page ───────────────────────────────────────────
-function renderRegisterPage(container) {
+async function handleLogin() {
+  clearError("login-error");
+  const email = document.getElementById("login-email").value;
+  const password = document.getElementById("login-password").value;
+  if (!email || !password) return showError("login-error", "Credentials Required");
+
+  setLoading("login-btn", true);
+  try {
+    const data = await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+    localStorage.setItem("token", data.token);
+    currentUser = { name: data.name, email: data.email, role: data.role };
+    showToast(`Welcome back, ${data.name}`);
+    navigate(data.role === "admin" ? "admin" : "my-complaints");
+  } catch (err) { showError("login-error", err.message); }
+  finally { setLoading("login-btn", false); }
+}
+
+function renderLoginPage(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Create Account</h1>
-      <p>Get started with your complaints portal</p>
-    </div>
-    <div class="stepper" id="register-stepper">
-      <div class="stepper-step active" id="step-1">
-        <div class="stepper-dot active">1</div>
-        <span class="stepper-label">Details</span>
+    <div class="max-w-xl mx-auto py-12 px-6 page-fade-in">
+      <div class="medical-card-bright p-8">
+        <div class="text-center mb-8">
+          <div class="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6 text-white shadow-xl shadow-primary/30">
+            <i class="fa-solid fa-fingerprint text-2xl"></i>
+          </div>
+          <h1 class="font-display text-4xl font-black text-slate-900 mb-2 tracking-tighter">Authority Access</h1>
+          <p class="text-slate-500 text-sm font-medium">Citizen Dispatch Console</p>
+        </div>
+        <div id="login-error"></div>
+        <div class="space-y-6">
+          <div>
+            <label class="form-label-bold text-primary">SECURE EMAIL ADDRESS</label>
+            <input class="form-input-large" id="login-email" type="email" placeholder="official@agency.gov" />
+          </div>
+          <div>
+            <label class="form-label-bold text-primary">ENCRYPTED PASSWORD</label>
+            <input class="form-input-large" id="login-password" type="password" placeholder="••••••••" />
+          </div>
+          <button class="w-full btn-large bg-primary text-white shadow-2xl h-[60px] text-lg" id="login-btn" onclick="handleLogin()">Authorize Identity</button>
+        </div>
+        <div class="flex justify-between items-center mt-10 pt-6 border-t border-slate-50">
+          <div class="text-xs text-slate-500 font-bold">
+            New Citizen? <a href="javascript:void(0)" class="text-secondary font-black hover:underline" onclick="navigate('register')">Enroll in Network</a>
+          </div>
+          <div class="text-xs text-slate-500 font-bold">
+            <i class="fa-solid fa-user-shield text-primary mr-1"></i>
+            <a href="javascript:void(0)" class="text-primary font-black hover:underline" onclick="showAdminTip()">Director's Entrance</a>
+          </div>
+        </div>
       </div>
-      <div class="stepper-line" id="line-1"></div>
-      <div class="stepper-step" id="step-2">
-        <div class="stepper-dot">2</div>
-        <span class="stepper-label">Verify</span>
-      </div>
-      <div class="stepper-line" id="line-2"></div>
-      <div class="stepper-step" id="step-3">
-        <div class="stepper-dot">3</div>
-        <span class="stepper-label">Password</span>
-      </div>
-    </div>
-
-    <!-- Step 1: Name + Email -->
-    <div class="card" id="register-step-1">
-      <div id="reg-error-1"></div>
-      <div class="form-group">
-        <label class="form-label" for="reg-name">Full Name</label>
-        <input class="form-input" id="reg-name" type="text" placeholder="Enter your full name" autocomplete="name" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="reg-email">Email Address</label>
-        <input class="form-input" id="reg-email" type="email" placeholder="you@example.com" autocomplete="email" />
-      </div>
-      <button class="btn btn-primary btn-full" id="reg-send-otp-btn" onclick="handleSendOtp()">Send OTP</button>
-    </div>
-
-    <!-- Step 2: OTP -->
-    <div class="card hidden" id="register-step-2">
-      <div id="reg-error-2"></div>
-      <p style="text-align:center;color:var(--text-secondary);margin-bottom:20px;font-size:0.9rem;">
-        We sent a 6-digit code to <strong id="reg-email-display" style="color:var(--primary-300);"></strong>
-      </p>
-      <div class="otp-group" id="otp-group">
-        <input class="otp-input" type="text" maxlength="1" data-idx="0" id="otp-0" />
-        <input class="otp-input" type="text" maxlength="1" data-idx="1" id="otp-1" />
-        <input class="otp-input" type="text" maxlength="1" data-idx="2" id="otp-2" />
-        <input class="otp-input" type="text" maxlength="1" data-idx="3" id="otp-3" />
-        <input class="otp-input" type="text" maxlength="1" data-idx="4" id="otp-4" />
-        <input class="otp-input" type="text" maxlength="1" data-idx="5" id="otp-5" />
-      </div>
-      <button class="btn btn-primary btn-full" id="reg-verify-otp-btn" onclick="handleVerifyOtpStep()">Verify OTP</button>
-    </div>
-
-    <!-- Step 3: Password -->
-    <div class="card hidden" id="register-step-3">
-      <div id="reg-error-3"></div>
-      <div class="form-group">
-        <label class="form-label" for="reg-password">Password</label>
-        <input class="form-input" id="reg-password" type="password" placeholder="Choose a password" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="reg-confirm">Confirm Password</label>
-        <input class="form-input" id="reg-confirm" type="password" placeholder="Confirm your password" />
-      </div>
-      <button class="btn btn-primary btn-full" id="reg-complete-btn" onclick="handleRegister()">Complete Registration</button>
-    </div>
-
-    <div class="form-footer">
-      Already have an account? <button class="text-link" id="go-to-login-link" onclick="navigate('login')">Log in</button>
     </div>
   `;
+}
 
-  // Setup OTP auto-focus
+function showAdminTip() {
+  showToast("Please enter administrative credentials above.", "success");
+}
+
+// ─── Registration Page ───────────────────────────────────────
+function renderRegisterPage(container) {
+  container.innerHTML = `
+    <div class="max-w-xl mx-auto py-6 px-6 page-fade-in">
+      <div class="text-center mb-6">
+        <div class="inline-flex items-center gap-2 text-primary font-black uppercase tracking-[0.2em] text-[8px] mb-1">Authority Network</div>
+        <h1 class="font-display text-4xl font-black text-slate-900 mb-2 tracking-tighter">Citizen Enrollment</h1>
+        <p class="text-slate-500 text-sm font-medium">Official UP Police Digital Cell</p>
+      </div>
+
+      <div class="flex items-center gap-4 mb-6 px-4 max-w-xs mx-auto">
+        <div class="step-dot active" id="dot-1" style="width:32px; height:32px; font-size:0.9rem; font-weight:900;">1</div>
+        <div class="step-line" style="height:4px;"><div class="step-line-active w-0" id="line-1"></div></div>
+        <div class="step-dot" id="dot-2" style="width:32px; height:32px; font-size:0.9rem; font-weight:900;">2</div>
+        <div class="step-line" style="height:4px;"><div class="step-line-active w-0" id="line-2"></div></div>
+        <div class="step-dot" id="dot-3" style="width:32px; height:32px; font-size:0.9rem; font-weight:900;">3</div>
+      </div>
+
+      <div class="medical-card-bright p-6">
+        <div id="register-step-1">
+          <div id="reg-error-1"></div>
+          <div class="space-y-6">
+            <div><label class="form-label-bold">FULL LEGAL NAME</label><input class="form-input-large" id="reg-name" type="text" placeholder="Aadhar/ID Name" /></div>
+            <div><label class="form-label-bold">SECURE EMAIL ADDRESS</label><input class="form-input-large" id="reg-email" type="email" placeholder="citizen@email.com" /></div>
+            <button class="w-full btn-large bg-primary text-white shadow-2xl h-[60px]" id="reg-send-otp-btn" onclick="handleSendOtp()">Initialize Verification</button>
+          </div>
+        </div>
+        <div class="hidden" id="register-step-2">
+          <div id="reg-error-2"></div>
+          <div class="text-center mb-8">
+            <p class="text-slate-500 text-sm font-medium">Dispatching code to</p>
+            <p class="font-black text-slate-900 text-lg tracking-tight" id="reg-email-display"></p>
+          </div>
+          <div class="grid grid-cols-6 gap-3 mb-8">
+            ${[0,1,2,3,4,5].map(i => `<input class="otp-cell" type="text" maxlength="1" id="otp-${i}" style="height:50px;" />`).join("")}
+          </div>
+          <button class="w-full btn-large bg-primary text-white shadow-2xl h-[60px]" id="reg-verify-otp-btn" onclick="handleVerifyOtpStep()">Verify Credentials</button>
+        </div>
+        <div class="hidden" id="register-step-3">
+          <div id="reg-error-3"></div>
+          <div class="space-y-6">
+            <div><label class="form-label-bold">AUTHORITY PASSWORD</label><input class="form-input-large" id="reg-password" type="password" placeholder="••••••••" /></div>
+            <div><label class="form-label-bold">CONFIRM PASSWORD</label><input class="form-input-large" id="reg-confirm" type="password" placeholder="••••••••" /></div>
+            <button class="w-full btn-large bg-primary text-white shadow-2xl h-[60px]" id="reg-complete-btn" onclick="handleRegister()">Authorize Enrollment</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
   setTimeout(setupOtpInputs, 0);
 }
 
 let regEmail = "";
-
 function setupOtpInputs() {
-  const inputs = document.querySelectorAll(".otp-input");
+  const inputs = document.querySelectorAll("#otp-0, #otp-1, #otp-2, #otp-3, #otp-4, #otp-5");
   inputs.forEach((input, i) => {
     input.addEventListener("input", (e) => {
-      const val = e.target.value;
-      if (val && i < inputs.length - 1) {
-        inputs[i + 1].focus();
-      }
+      e.target.value = e.target.value.replace(/[^0-9]/g, "");
+      if (e.target.value && i < inputs.length - 1) inputs[i + 1].focus();
     });
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Backspace" && !e.target.value && i > 0) {
-        inputs[i - 1].focus();
-      }
-    });
-    // Allow only digits
-    input.addEventListener("input", (e) => {
-      e.target.value = e.target.value.replace(/[^0-9]/g, "");
+      if (e.key === "Backspace" && !e.target.value && i > 0) inputs[i - 1].focus();
     });
   });
 }
 
-function showError(containerId, message) {
-  const el = document.getElementById(containerId);
-  if (el) {
-    el.innerHTML = `<div class="msg msg-error">${escapeHTML(message)}</div>`;
-  }
-}
-
-function clearError(containerId) {
-  const el = document.getElementById(containerId);
-  if (el) el.innerHTML = "";
-}
-
-function setLoading(btnId, loading) {
-  const btn = document.getElementById(btnId);
-  if (!btn) return;
-  if (loading) {
-    btn.disabled = true;
-    btn._originalText = btn.textContent;
-    btn.innerHTML = `<div class="spinner"></div> Please wait...`;
-  } else {
-    btn.disabled = false;
-    btn.innerHTML = btn._originalText || "Submit";
-  }
-}
-
-function updateStepper(activeStep) {
-  for (let i = 1; i <= 3; i++) {
-    const step = document.getElementById(`step-${i}`);
-    const dot = step ? step.querySelector(".stepper-dot") : null;
-    if (!step || !dot) continue;
-    step.classList.remove("active");
-    dot.classList.remove("active", "done");
-    if (i < activeStep) {
-      dot.classList.add("done");
-      dot.innerHTML = "✓";
-    } else if (i === activeStep) {
-      step.classList.add("active");
-      dot.classList.add("active");
-      dot.textContent = i;
-    } else {
-      dot.textContent = i;
-    }
-  }
-  // Lines
-  for (let i = 1; i <= 2; i++) {
-    const line = document.getElementById(`line-${i}`);
-    if (line) {
-      line.classList.toggle("done", i < activeStep);
-    }
-  }
-}
-
 async function handleSendOtp() {
-  clearError("reg-error-1");
   const name = document.getElementById("reg-name").value.trim();
   const email = document.getElementById("reg-email").value.trim();
-  if (!name || !email) {
-    showError("reg-error-1", "Please fill in both fields.");
-    return;
-  }
-
+  if (!name || !email) return showError("reg-error-1", "Identity data required");
   setLoading("reg-send-otp-btn", true);
   try {
-    await api("/auth/send-otp", {
-      method: "POST",
-      body: JSON.stringify({ name, email }),
-    });
+    await api("/auth/send-otp", { method: "POST", body: JSON.stringify({ name, email }) });
     regEmail = email;
     document.getElementById("reg-email-display").textContent = email;
     document.getElementById("register-step-1").classList.add("hidden");
     document.getElementById("register-step-2").classList.remove("hidden");
     updateStepper(2);
-    showToast("OTP sent to your email!");
-    // Focus first OTP input
-    setTimeout(() => document.getElementById("otp-0")?.focus(), 100);
-  } catch (err) {
-    showError("reg-error-1", err.message);
-  }
-  setLoading("reg-send-otp-btn", false);
+    showToast("Authentication code dispatched");
+  } catch (err) { showError("reg-error-1", err.message); }
+  finally { setLoading("reg-send-otp-btn", false); }
 }
 
-function handleVerifyOtpStep() {
+async function handleVerifyOtpStep() {
   clearError("reg-error-2");
   let otp = "";
-  for (let i = 0; i < 6; i++) {
-    otp += document.getElementById(`otp-${i}`).value;
+  for (let i = 0; i < 6; i++) otp += document.getElementById(`otp-${i}`).value;
+  if (otp.length !== 6) return showError("reg-error-2", "Incomplete code");
+
+  setLoading("reg-verify-otp-btn", true);
+  try {
+    await api("/auth/verify-otp", { 
+      method: "POST", 
+      body: JSON.stringify({ email: regEmail, otp }) 
+    });
+    window._regOtp = otp;
+    document.getElementById("register-step-2").classList.add("hidden");
+    document.getElementById("register-step-3").classList.remove("hidden");
+    updateStepper(3);
+    showToast("Identity Verified Successfully");
+  } catch (err) {
+    showError("reg-error-2", err.message);
+  } finally {
+    setLoading("reg-verify-otp-btn", false);
   }
-  if (otp.length !== 6) {
-    showError("reg-error-2", "Please enter the complete 6-digit OTP.");
-    return;
-  }
-  // Store OTP for final register call, move to password step
-  window._regOtp = otp;
-  document.getElementById("register-step-2").classList.add("hidden");
-  document.getElementById("register-step-3").classList.remove("hidden");
-  updateStepper(3);
 }
 
 async function handleRegister() {
-  clearError("reg-error-3");
   const password = document.getElementById("reg-password").value;
   const confirm = document.getElementById("reg-confirm").value;
-
-  if (!password) {
-    showError("reg-error-3", "Please enter a password.");
-    return;
-  }
-  if (password !== confirm) {
-    showError("reg-error-3", "Passwords do not match.");
-    return;
-  }
-
+  if (password !== confirm) return showError("reg-error-3", "Passwords mismatch");
   setLoading("reg-complete-btn", true);
   try {
-    await api("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email: regEmail, otp: window._regOtp, password }),
-    });
-    showToast("Registration successful! Please log in.");
+    await api("/auth/register", { method: "POST", body: JSON.stringify({ email: regEmail, otp: window._regOtp, password }) });
+    showToast("Enrollment successful. Access granted.");
     navigate("login");
-  } catch (err) {
-    showError("reg-error-3", err.message);
-  }
-  setLoading("reg-complete-btn", false);
+  } catch (err) { showError("reg-error-3", err.message); }
+  finally { setLoading("reg-complete-btn", false); }
 }
 
-// ─── Login Page ──────────────────────────────────────────────
-function renderLoginPage(container) {
-  container.innerHTML = `
-    <div class="page-header">
-      <h1>Welcome Back</h1>
-      <p>Sign in to your complaints portal</p>
-    </div>
-    <div class="card">
-      <div id="login-error"></div>
-      <div class="form-group">
-        <label class="form-label" for="login-email">Email Address</label>
-        <input class="form-input" id="login-email" type="email" placeholder="you@example.com" autocomplete="email" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="login-password">Password</label>
-        <input class="form-input" id="login-password" type="password" placeholder="Enter your password" autocomplete="current-password" />
-      </div>
-      <button class="btn btn-primary btn-full" id="login-btn" onclick="handleLogin()">Sign In</button>
-    </div>
-    <div class="form-footer">
-      Don't have an account? <button class="text-link" id="go-to-register-link" onclick="navigate('register')">Create one</button>
-      <div style="margin-top:15px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px;">
-        <button class="text-link" style="font-size:0.75rem; color:var(--text-secondary);" onclick="navigate('admin')">Administrator? Access Portal</button>
-      </div>
-    </div>
-  `;
-
-  // Enter key support
-  setTimeout(() => {
-    const passField = document.getElementById("login-password");
-    if (passField) {
-      passField.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") handleLogin();
-      });
+function updateStepper(active) {
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById(`dot-${i}`);
+    if (dot) {
+      dot.classList.toggle("active", i === active);
+      dot.classList.toggle("done", i < active);
     }
-  }, 0);
-}
-
-async function handleLogin() {
-  clearError("login-error");
-  const email = document.getElementById("login-email").value.trim();
-  const password = document.getElementById("login-password").value;
-
-  if (!email || !password) {
-    showError("login-error", "Please enter both email and password.");
-    return;
-  }
-
-  setLoading("login-btn", true);
-  try {
-    const data = await api("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-    localStorage.setItem("token", data.token);
-    currentUser = { name: data.name, email: data.email, role: data.role };
-    showToast(`Welcome back, ${data.name}!`);
-    if (data.role === "admin") {
-      navigate("admin");
-    } else {
-      navigate("my-complaints");
-    }
-  } catch (err) {
-    showError("login-error", err.message);
-  } finally {
-    setLoading("login-btn", false);
   }
 }
 
-// ─── Submit Complaint Page ───────────────────────────────────
+// ─── Grievance Submission ────────────────────────────────────
 function renderSubmitPage(container) {
-  if (!currentUser) return navigate("login");
-
   container.innerHTML = `
-    <div class="page-header">
-      <h1>Submit a Complaint</h1>
-      <p>Describe your issue and our AI will help gather more details</p>
-    </div>
-    <div class="card">
-      <div id="submit-error"></div>
-      <div class="form-group">
-        <label class="form-label" for="complaint-text">Your Complaint</label>
-        <textarea class="form-textarea" id="complaint-text" placeholder="Describe your complaint in detail..." rows="5"></textarea>
+    <div class="max-w-5xl mx-auto py-12 px-6 page-fade-in">
+      <div class="text-center mb-10">
+        <h1 class="font-display text-5xl font-black text-slate-900 mb-4 tracking-tighter">Submit Incident Report</h1>
+        <p class="text-slate-500 text-lg font-medium">Our Intelligence Analysis Unit will guide your submission.</p>
       </div>
-      <button class="btn btn-secondary btn-full" id="get-ai-btn" onclick="handleGetAIQuestion()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="10" y1="22" x2="14" y2="22"/></svg>
-        Get AI Follow-up Question
-      </button>
-
-      <div class="hidden" id="ai-section">
-        <div class="ai-box">
-          <div class="ai-box-label">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            AI Follow-up Question
+      <div class="medical-card-bright p-10">
+        <div id="submit-error"></div>
+        <div class="space-y-8">
+          <div><label class="form-label-bold">OFFICIAL INCIDENT STATEMENT</label><textarea class="form-input-large min-h-[160px]" id="complaint-text"></textarea></div>
+          <button class="w-full btn-large bg-slate-900 text-white" id="get-ai-btn" onclick="handleGetAIQuestion()">Initialize Intelligence Triage</button>
+          <div class="hidden space-y-8 pt-8 border-t-2 border-slate-50" id="ai-section">
+            <div class="bg-primary/5 p-8 rounded-[32px]"><div class="text-2xl font-black text-slate-900" id="ai-question-display"></div></div>
+            <div><label class="form-label-bold">SUPPLEMENTARY EVIDENCE</label><textarea class="form-input-large min-h-[120px]" id="ai-answer"></textarea></div>
+            <button class="w-full btn-large bg-primary text-white" id="submit-complaint-btn" onclick="handleSubmitComplaint()">Authorize Dispatch</button>
           </div>
-          <div class="ai-box-question" id="ai-question-display"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="ai-answer">Your Answer</label>
-          <textarea class="form-textarea" id="ai-answer" placeholder="Provide additional details..." rows="3"></textarea>
-        </div>
-        <button class="btn btn-primary btn-full" id="submit-complaint-btn" onclick="handleSubmitComplaint()">
-          Submit Complaint
-        </button>
       </div>
     </div>
   `;
 }
 
 let aiQuestion = "";
-
 async function handleGetAIQuestion() {
-  clearError("submit-error");
   const text = document.getElementById("complaint-text").value.trim();
-  if (!text) {
-    showError("submit-error", "Please describe your complaint first.");
-    return;
-  }
-
+  if (!text) return showError("submit-error", "Incident details required");
   setLoading("get-ai-btn", true);
   try {
-    const data = await api("/ai/question", {
-      method: "POST",
-      body: JSON.stringify({ complaint_text: text }),
-    });
+    const data = await api("/ai/question", { method: "POST", body: JSON.stringify({ complaint_text: text }) });
     aiQuestion = data.question;
     document.getElementById("ai-question-display").textContent = data.question;
     document.getElementById("ai-section").classList.remove("hidden");
-  } catch (err) {
-    showError("submit-error", err.message);
-  }
-  setLoading("get-ai-btn", false);
+  } catch (err) { showError("submit-error", err.message); }
+  finally { setLoading("get-ai-btn", false); }
 }
 
 async function handleSubmitComplaint() {
-  clearError("submit-error");
   const complaint_text = document.getElementById("complaint-text").value.trim();
   const ai_answer = document.getElementById("ai-answer").value.trim();
-
-  if (!complaint_text) {
-    showError("submit-error", "Complaint text is required.");
-    return;
-  }
-
   setLoading("submit-complaint-btn", true);
   try {
-    await api("/complaints", {
-      method: "POST",
-      body: JSON.stringify({
-        complaint_text,
-        ai_question: aiQuestion,
-        ai_answer,
-      }),
-    });
-    showToast("Complaint submitted successfully!");
+    await api("/complaints", { method: "POST", body: JSON.stringify({ complaint_text, ai_question: aiQuestion, ai_answer }) });
+    showToast("Dispatch authorized successfully");
     navigate("my-complaints");
-  } catch (err) {
-    showError("submit-error", err.message);
-  }
-  setLoading("submit-complaint-btn", false);
+  } catch (err) { showError("submit-error", err.message); }
+  finally { setLoading("submit-complaint-btn", false); }
 }
 
-// ─── My Complaints Page ─────────────────────────────────────
+// ─── Citizen Dashboard ───────────────────────────────────────
 async function renderMyComplaintsPage(container) {
-  if (!currentUser) return navigate("login");
-
   container.innerHTML = `
-    <div class="page-header">
-      <h1>My Complaints</h1>
-      <p>Track the complaints you've submitted</p>
-    </div>
-    <div style="text-align:center;margin-bottom:28px;">
-      <button class="btn btn-primary" id="new-complaint-btn" onclick="navigate('submit')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Submit New Complaint
-      </button>
-    </div>
-    <div id="my-complaints-list">
-      <div class="empty-state">
-        <div class="loading-spinner" style="margin:0 auto;"></div>
-        <p style="margin-top:16px;">Loading your complaints...</p>
+    <div class="max-w-7xl mx-auto py-24 px-6 page-fade-in">
+      <div class="flex justify-between items-end mb-16">
+        <div><h1 class="font-display text-5xl font-black text-slate-900 tracking-tighter">Citizen Command Center</h1></div>
+        <button class="bg-primary text-white px-10 py-5 rounded-[24px] font-black" onclick="navigate('submit')">+ File New Incident</button>
+      </div>
+      <div class="grid grid-cols-3 gap-10 mb-16">
+        <div class="medical-card-bright p-10">Total: <span id="dash-stat-total">0</span></div>
+        <div class="medical-card-bright p-10">Active: <span id="dash-stat-pending">0</span></div>
+        <div class="medical-card-bright p-10">Resolved: <span id="dash-stat-resolved">0</span></div>
+      </div>
+      <div class="bg-white rounded-[48px] shadow-2xl overflow-hidden" id="my-complaints-list">
+        <div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Synchronizing Databases...</p></div>
       </div>
     </div>
   `;
-
   try {
     const data = await api("/complaints/my");
-    renderComplaintsList(
-      document.getElementById("my-complaints-list"),
-      data.complaints,
-      false
-    );
-  } catch (err) {
-    document.getElementById("my-complaints-list").innerHTML = `
-      <div class="msg msg-error">${escapeHTML(err.message)}</div>
-    `;
-  }
+    const stats = { total: data.complaints.length, pending: 0, resolved: 0 };
+    data.complaints.forEach(c => c.status === 'resolved' ? stats.resolved++ : stats.pending++);
+    document.getElementById("dash-stat-total").innerText = stats.total;
+    document.getElementById("dash-stat-pending").innerText = stats.pending;
+    document.getElementById("dash-stat-resolved").innerText = stats.resolved;
+    renderComplaintsTable(document.getElementById("my-complaints-list"), data.complaints);
+  } catch (err) { document.getElementById("my-complaints-list").innerHTML = `<div class="p-12 text-center text-secondary">${err.message}</div>`; }
 }
 
-// ─── Admin Dashboard ────────────────────────────────────────
-async function renderAdminPage(container) {
-  if (!currentUser || currentUser.role !== "admin") return navigate("login");
-
-  container.innerHTML = `
-    <div class="admin-layout">
-      <!-- Sidebar -->
-      <div class="sidebar">
-        <div class="sidebar-logo">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="background:rgba(99,102,241,0.1); padding:6px; border-radius:8px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          AdminHub
-        </div>
-        <div class="sidebar-nav">
-          <div class="nav-item active" onclick="renderAdminDashboardView()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-            Dashboard
-          </div>
-          <div class="nav-item" onclick="renderAdminComplaints()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Complaints
-          </div>
-          <div class="nav-item" onclick="renderUserManagement()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Users
-          </div>
-        </div>
-        <div style="margin-top:auto;">
-          <div class="nav-item" onclick="handleLogout()" style="color:#ef4444;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            Logout
-          </div>
-        </div>
-      </div>
-
-      <!-- Main Content -->
-      <div class="admin-main">
-        <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:40px;">
-          <div>
-            <h1 style="font-size:1.8rem; font-weight:800; letter-spacing:-0.02em;">Welcome back, ${currentUser.name}!</h1>
-            <p style="color:var(--text-muted); font-size:0.95rem;">Here's what's happening on your platform today.</p>
-          </div>
-          <div style="display:flex; gap:16px;">
-            <div style="text-align:right;">
-              <div style="font-weight:700; font-size:0.9rem;">Administrator</div>
-              <div style="font-size:0.75rem; color:var(--text-muted);">${currentUser.email}</div>
-            </div>
-            <div style="width:40px; height:40px; background:var(--grad-purple); border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-weight:800;">
-              ${currentUser.name[0]}
-            </div>
-          </div>
-        </header>
-
-        <div id="admin-content-area">
-          <!-- Views will be injected here -->
-        </div>
-      </div>
-    </div>
-  `;
-
-  renderAdminDashboardView();
-}
-
-async function renderAdminDashboardView() {
-  // Set active state in sidebar
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  document.querySelector('.nav-item:nth-child(1)').classList.add('active');
-
-  const area = document.getElementById("admin-content-area");
-  area.innerHTML = `
-    <div class="stats-grid">
-      <div class="stat-card card-total" onclick="renderAdminComplaints('all')">
-        <p>Total Complaints</p>
-        <h3 id="stat-total">...</h3>
-        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-      </div>
-      <div class="stat-card card-pending" onclick="renderAdminComplaints('pending')">
-        <p>Pending Review</p>
-        <h3 id="stat-pending">...</h3>
-        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      </div>
-      <div class="stat-card card-resolved" onclick="renderAdminComplaints('resolved')">
-        <p>Resolved</p>
-        <h3 id="stat-resolved">...</h3>
-        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
-      </div>
-      <div class="stat-card card-users" onclick="renderUserManagement()">
-        <p>Active Users</p>
-        <h3 id="stat-users">...</h3>
-        <div class="card-icon-bg"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-      </div>
-    </div>
-
-    <div id="admin-content-area">
-      <div class="empty-state">
-        <div class="empty-state-icon">📊</div>
-        <h3>Select a card above to manage data</h3>
-      </div>
-    </div>
-  `;
-
-  // Fetch stats
-  try {
-    const stats = await api("/admin/stats");
-    document.getElementById("stat-total").innerText = stats.total ?? 0;
-    document.getElementById("stat-pending").innerText = stats.pending ?? 0;
-    document.getElementById("stat-resolved").innerText = stats.resolved ?? 0;
-    document.getElementById("stat-users").innerText = stats.users ?? 0;
-  } catch (err) {
-    showToast("Stats Error: " + err.message, "error");
-  }
-}
-
-async function renderAdminComplaints(filter = "all") {
-  const area = document.getElementById("admin-content-area");
-  area.innerHTML = `<div style="text-align:center; padding:40px;">Loading ${filter} complaints...</div>`;
-
-  try {
-    const { complaints } = await api("/admin/complaints");
-    let filtered = complaints;
-    if (filter !== "all") {
-      filtered = complaints.filter(c => c.status === filter);
-    }
-
-    if (filtered.length === 0) {
-      area.innerHTML = `<div class="empty-state"><h3>No ${filter} complaints found.</h3></div>`;
-      return;
-    }
-    area.innerHTML = `
-      <h2 style="margin-bottom:20px; font-size:1.2rem;">${filter.toUpperCase()} COMPLAINTS</h2>
-      <div class="complaints-list">
-        ${filtered.map(c => `
-          <div class="complaint-card">
-            <div style="display:flex; justify-content:space-between; align-items:start;">
-              <div class="status-badge status-${c.status}">${c.status}</div>
-              <div style="text-align:right; font-size:0.8rem; color:var(--text-muted);">
-                ${escapeHTML(c.user_name)} (${escapeHTML(c.user_email)})
-              </div>
-            </div>
-            <div class="complaint-section">
-              <div class="complaint-section-label">ID: ${c.id}</div>
-              <div class="complaint-section-text">${escapeHTML(c.complaint_text)}</div>
-            </div>
-            ${c.status === 'pending' ? `
-              <button class="btn btn-primary btn-sm" onclick="showResolutionModal('${c.id}', '${encodeURIComponent(c.complaint_text)}')">Resolve Now</button>
-            ` : `
-              <div class="resolution-box">
-                <div class="resolution-label" style="display:flex; justify-content:space-between; align-items:center;">
-                  Resolution
-                  <button class="btn btn-ghost btn-sm" style="color:var(--warning); padding:4px 8px; font-size:0.75rem; border:1px solid var(--warning);" onclick="handleReopen('${c.id}')">Reopen</button>
-                </div>
-                <div class="complaint-section-text">${escapeHTML(c.resolution_text)}</div>
-              </div>
-            `}
-          </div>
-        `).join("")}
-      </div>
-    `;
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-}
-
-async function showResolutionModal(id, encodedText) {
-  const complaintText = decodeURIComponent(encodedText);
-
-  // Open modal with loading state
-  openModal(`
-    <div class="modal-header">
-      <h3 style="margin:0;">Resolve Complaint</h3>
-      <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="complaint-section">
-        <div class="complaint-section-label">Original Complaint</div>
-        <div class="complaint-section-text" style="font-style:italic;">"${escapeHTML(complaintText)}"</div>
-      </div>
-      <div class="form-group" style="margin-top:20px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <label class="form-label" style="margin:0;">Resolution Message</label>
-          <span id="ai-status" style="font-size:0.75rem; color:var(--primary);">✨ AI is generating suggestion...</span>
-        </div>
-        <textarea id="modal-res-input" class="input-field" style="min-height:150px;" placeholder="Writing resolution..."></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="modal-submit-btn" onclick="handleResolve('${id}')">Submit & Send Email</button>
-    </div>
-  `);
-
-  // Automatically fetch AI suggestion
-  try {
-    const { suggestion } = await api(`/admin/complaints/${id}/ai-suggest`, { method: "POST" });
-    document.getElementById("modal-res-input").value = suggestion;
-    document.getElementById("ai-status").innerText = "✨ AI suggestion ready!";
-  } catch (err) {
-    document.getElementById("ai-status").innerText = "❌ AI suggestion failed.";
-    document.getElementById("modal-res-input").placeholder = "Enter your resolution manually...";
-  }
-}
-
-async function handleResolve(id) {
-  const text = document.getElementById(`modal-res-input`).value.trim();
-  if (!text) return showToast("Please enter a resolution message", "error");
-
-  setLoading("modal-submit-btn", true);
-  try {
-    await api(`/admin/complaints/${id}/resolve`, {
-      method: "PATCH",
-      body: JSON.stringify({ resolution_text: text })
-    });
-    showToast("Complaint resolved and email sent!");
-    closeModal();
-    renderAdminComplaints(); // Refresh admin list
-  } catch (err) {
-    showToast(err.message, "error");
-  } finally {
-    setLoading("modal-submit-btn", false);
-  }
-}
-
-async function handleReopen(id) {
-  if (!confirm("Are you sure you want to reopen this complaint? It will be marked as pending again.")) return;
-
-  try {
-    await api(`/admin/complaints/${id}/reopen`, {
-      method: "PATCH"
-    });
-    showToast("Complaint reopened successfully!");
-    renderAdminComplaints(); // Refresh admin list
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-}
-
-// ─── Shared: Render Complaint Cards ─────────────────────────
-function renderComplaintsList(container, complaints, showUser) {
-  if (!complaints || complaints.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">📭</div>
-        <h3>No Complaints Yet</h3>
-        <p>${showUser
-        ? "No complaints have been submitted by any users."
-        : "You haven't submitted any complaints yet."
-      }</p>
-      </div>
-    `;
+function renderComplaintsTable(container, complaints) {
+  if (complaints.length === 0) {
+    container.innerHTML = `<div class="p-20 text-center"><p class="text-slate-400 font-black mb-4 uppercase">No Incident Records</p></div>`;
     return;
   }
-
-  container.innerHTML = complaints
-    .slice()
-    .reverse()
-    .map(
-      (c) => `
-    <div class="complaint-card">
-      <div class="complaint-meta">
-        ${showUser
-          ? `<span class="complaint-user-info">${escapeHTML(c.user_name)} · ${escapeHTML(c.user_email)}</span>`
-          : `<span></span>`
-        }
-        <span class="complaint-date">${formatDate(c.created_at)}</span>
-      </div>
-      <div class="complaint-section">
-        <div class="complaint-section-label">Complaint</div>
-        <div class="complaint-section-text">${escapeHTML(c.complaint_text)}</div>
-      </div>
-      ${c.ai_question
-          ? `
-      <div class="complaint-section">
-        <div class="complaint-section-label">AI Follow-up Question</div>
-        <div class="complaint-section-text ai-text">${escapeHTML(c.ai_question)}</div>
-      </div>`
-          : ""
-        }
-      ${c.user_answer
-          ? `
-      <div class="complaint-section">
-        <div class="complaint-section-label">User's Answer</div>
-        <div class="complaint-section-text">${escapeHTML(c.user_answer)}</div>
-      </div>`
-          : ""
-        }
-    </div>
-  `
-    )
-    .join("");
+  container.innerHTML = `
+    <table class="w-full">
+      <thead><tr class="bg-slate-50 text-left"><th class="px-8 py-4">ID</th><th class="px-8 py-4">Incident</th><th class="px-8 py-4">Status</th><th class="px-8 py-4"></th></tr></thead>
+      <tbody class="divide-y divide-slate-100">
+        ${complaints.map(c => `
+          <tr class="hover:bg-primary/5 transition-all">
+            <td class="px-8 py-6 font-black text-primary">#${c.id.slice(0,8).toUpperCase()}</td>
+            <td class="px-8 py-6 font-bold truncate max-w-[300px]">${escapeHTML(c.complaint_text)}</td>
+            <td class="px-8 py-6 text-center"><span class="px-4 py-1 rounded-full text-[10px] font-black uppercase ${c.status === 'resolved' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}">${c.status}</span></td>
+            <td class="px-8 py-6 text-right"><button onclick="showIncidentDetailsModal('${c.id}')" class="text-primary font-black"><i class="fa-solid fa-arrow-right"></i></button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
-async function renderUserManagement() {
-  const area = document.getElementById("admin-content-area");
-  area.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; animation: fadeSlideUp 0.3s ease;">
-      <h2 style="font-size:1.1rem; margin:0;">USER ACCOUNTS</h2>
-      <button class="btn btn-primary btn-sm" onclick="showCreateUserModal()">+ New User/Admin</button>
+async function showIncidentDetailsModal(id) {
+  const modal = document.createElement("div");
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.id = "incident-modal";
+  modal.innerHTML = `<div class="medical-card-bright p-20 text-center w-full max-w-xl"><div class="spinner mx-auto mb-6"></div><p class="font-black">Retrieving Official Dossier...</p></div>`;
+  document.body.appendChild(modal);
+
+  try {
+    const data = await api(`/complaints/${id}`);
+    const c = data.complaint;
+    
+    if (!c) throw new Error("Incomplete dossier record received.");
+
+    modal.innerHTML = `
+      <div class="medical-card-bright p-10 max-w-2xl w-full page-fade-in relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-2 bg-primary"></div>
+        <div class="flex justify-between items-start mb-8">
+          <div>
+            <div class="text-[10px] font-black text-primary uppercase tracking-[0.4em] mb-2">Case ID: #${(c.id || "UNKNOWN").toUpperCase()}</div>
+            <h2 class="text-3xl font-black tracking-tighter">Investigation Dossier</h2>
+          </div>
+          <button onclick="document.getElementById('incident-modal').remove()" class="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 hover:text-secondary transition-all">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div class="space-y-8 max-h-[60vh] overflow-y-auto no-scrollbar pr-4">
+          <div class="bg-slate-50 p-6 rounded-[24px]">
+            <label class="form-label-bold text-[8px]">Incident Statement</label>
+            <p class="text-lg font-bold text-slate-700 leading-relaxed">${escapeHTML(c.complaint_text || "No statement recorded.")}</p>
+          </div>
+
+          ${c.ai_question ? `
+            <div class="border-l-4 border-secondary pl-6 space-y-4">
+              <div class="bg-secondary/5 p-6 rounded-[24px]">
+                <label class="form-label-bold text-[8px] text-secondary">Authority Triage Question</label>
+                <p class="text-base font-black italic">"${escapeHTML(c.ai_question)}"</p>
+              </div>
+              <div class="bg-slate-50 p-6 rounded-[24px]">
+                <label class="form-label-bold text-[8px]">Citizen Response</label>
+                <p class="text-base font-bold text-slate-500">${escapeHTML(c.user_answer || "N/A")}</p>
+              </div>
+            </div>
+          ` : ''}
+
+          ${c.status === 'resolved' ? `
+            <div class="bg-primary text-white p-8 rounded-[32px] shadow-2xl shadow-primary/20">
+              <label class="form-label-bold text-[8px] text-white/50">Official Authority Resolution</label>
+              <p class="text-xl font-black italic leading-relaxed">"${escapeHTML(c.resolution_text || "Case resolved by administrative order.")}"</p>
+              <div class="mt-6 flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-primary bg-white/10 px-4 py-2 rounded-full w-fit">
+                <i class="fa-solid fa-check-double"></i> Case Closed
+              </div>
+            </div>
+          ` : `
+            <div class="flex items-center gap-4 p-6 bg-orange-50 rounded-[24px] border border-orange-100">
+               <div class="w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center animate-pulse"><i class="fa-solid fa-clock-rotate-left"></i></div>
+               <div>
+                  <div class="text-sm font-black text-orange-900">Current Status: ${(c.status || "PENDING").toUpperCase()}</div>
+                  <div class="text-[10px] font-bold text-orange-600 uppercase">Awaiting further investigation</div>
+               </div>
+            </div>
+          `}
+        </div>
+
+        <div class="mt-10 pt-6 border-t border-slate-100 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+           <div>Filed: ${formatDate(c.created_at)}</div>
+           <div class="flex items-center gap-2"><i class="fa-solid fa-shield-halved"></i> UP Police Secure</div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    modal.innerHTML = `<div class="medical-card-bright p-10 text-center w-full max-w-xl"><p class="text-secondary font-black mb-6">${err.message}</p><button onclick="document.getElementById('incident-modal').remove()" class="btn-large bg-primary text-white w-full">Dismiss</button></div>`;
+  }
+}
+
+// ─── Investigation Tracker ───────────────────────────────────
+async function renderTrackPage(container, id) {
+  container.innerHTML = `<div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Retrieving Official Record...</p></div>`;
+  try {
+    const c = await api(`/complaints/${id}`);
+    const steps = [
+      { label: "Dispatch Recorded", icon: "fa-file-signature", active: true },
+      { label: "Case Triage", icon: "fa-user-shield", active: true },
+      { label: "Investigation Bureau", icon: "fa-magnifying-glass", active: c.status !== 'pending' },
+      { label: "Authority Resolution", icon: "fa-handcuffs", active: c.status === 'resolved' }
+    ];
+
+    container.innerHTML = `
+      <div class="max-w-7xl mx-auto py-12 px-6 page-fade-in">
+        <div class="medical-card-bright p-10 bg-slate-900 text-white mb-10">
+          <div class="text-[10px] font-black text-primary uppercase tracking-[0.4em] mb-4">Case Identity: #${c.id.toUpperCase()}</div>
+          <h1 class="text-4xl font-black mb-6 tracking-tighter">Investigation Timeline</h1>
+          <div class="flex justify-between relative pt-8 pb-4">
+            <div class="absolute top-[48px] left-0 w-full h-1 bg-white/10"></div>
+            ${steps.map(s => `
+              <div class="relative z-10 flex flex-col items-center gap-4">
+                <div class="w-10 h-10 ${s.active ? 'bg-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.5)]' : 'bg-white/10'} rounded-full flex items-center justify-center border-2 border-slate-900">
+                  <i class="fa-solid ${s.icon} text-xs"></i>
+                </div>
+                <div class="text-[8px] font-black uppercase tracking-widest ${s.active ? 'text-white' : 'text-white/30'}">${s.label}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="grid lg:grid-cols-3 gap-10">
+          <div class="lg:col-span-2 space-y-10">
+            <div class="medical-card-bright p-10">
+              <h3 class="text-xl font-black text-slate-900 mb-6 tracking-tight">Dispatch Summary</h3>
+              <p class="text-lg font-bold text-slate-500 leading-relaxed mb-8 truncate-3-lines">${escapeHTML(c.complaint_text)}</p>
+              ${c.ai_question ? `
+                <div class="bg-slate-50 p-8 rounded-[32px] border-l-4 border-primary">
+                  <div class="text-[8px] font-black text-primary uppercase tracking-widest mb-3">Authority Follow-up</div>
+                  <p class="text-base font-black text-slate-900 italic">"${escapeHTML(c.ai_question)}"</p>
+                  <div class="mt-4 text-base font-bold text-slate-500">${escapeHTML(c.ai_answer || "Awaiting intelligence...")}</div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+          <div>
+             <div class="medical-card-bright p-8 mb-6"><div class="text-[10px] font-black text-slate-400 mb-1 uppercase">Status</div><div class="text-xl font-black text-primary uppercase">${c.status}</div></div>
+             <div class="medical-card-bright p-8"><div class="text-[10px] font-black text-slate-400 mb-1 uppercase">Dispatch Date</div><div class="text-lg font-bold">${formatDate(c.created_at)}</div></div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) { container.innerHTML = `<div class="p-12 text-center text-secondary">${err.message}</div>`; }
+}
+
+// ─── Authority Pages ──────────────────────────────────────────
+function renderDepartmentsPage(container) {
+  const units = [
+    { name: "Cyber Crime Wing", desc: "Specialized unit for investigation of hacking and digital fraud.", icon: "fa-binary" },
+    { name: "Anti-Terrorist Squad", desc: "Elite unit for counter-terrorism operations.", icon: "fa-shield-halved" },
+    { name: "Women Power Line 1090", desc: "24x7 specialized wing for women security.", icon: "fa-person-dress" }
+  ];
+  container.innerHTML = `
+    <div class="max-w-7xl mx-auto py-24 px-6 page-fade-in">
+      <div class="text-center mb-20"><h1 class="font-display text-6xl font-black text-slate-900 tracking-tighter">Authority Units</h1></div>
+      <div class="grid md:grid-cols-3 gap-10">
+        ${units.map(u => `<div class="medical-card-bright p-10"><div class="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mb-8"><i class="fa-solid ${u.icon} text-2xl"></i></div><h3 class="text-2xl font-black mb-4">${u.name}</h3><p class="text-slate-500 font-medium mb-8">${u.desc}</p><button onclick="navigate('submit')" class="text-primary font-black uppercase text-xs">File Dispatch →</button></div>`).join('')}
+      </div>
     </div>
-    <div id="users-list-container" class="card" style="padding:0; border-radius:8px; overflow:hidden;">
-      <div style="text-align:center; padding:40px; color:var(--text-muted);">Loading user database...</div>
+  `;
+}
+
+function renderContactPage(container) {
+  container.innerHTML = `
+    <div class="max-w-7xl mx-auto py-12 px-6 page-fade-in">
+      <h1 class="font-display text-5xl font-black text-slate-900 mb-8 tracking-tighter">Direct Command</h1>
+      <div class="grid lg:grid-cols-2 gap-16">
+        <div class="space-y-8">
+          <div class="flex items-center gap-6"><div class="w-12 h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><i class="fa-solid fa-phone"></i></div><div class="text-xl font-black">Emergency: 112</div></div>
+          <div class="flex items-center gap-6"><div class="w-12 h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center"><i class="fa-solid fa-building"></i></div><div class="text-xl font-black">Official HQ: 0522-2390314</div></div>
+        </div>
+        <div class="medical-card-bright p-10 bg-primary text-white">
+          <h3 class="text-3xl font-black mb-6">Inquiry Desk</h3>
+          <p class="text-white/60 font-bold mb-8">Secure channel for official administrative queries.</p>
+          <button onclick="showContactModal()" class="btn-large bg-white text-primary w-full shadow-2xl">Send Message</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function showContactModal() {
+  const modal = document.createElement("div");
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.id = "contact-modal";
+  modal.innerHTML = `
+    <div class="medical-card-bright p-10 max-w-xl w-full page-fade-in">
+      <h3 class="text-3xl font-black mb-8 tracking-tight">Official Inquiry Dispatch</h3>
+      <div id="contact-error"></div>
+      <div class="space-y-6 mb-8">
+        <div><label class="form-label-bold">CITIZEN NAME</label><input id="contact-name" class="form-input-large" placeholder="Enter Full Name" /></div>
+        <div><label class="form-label-bold">IDENTITY EMAIL</label><input id="contact-email" class="form-input-large" placeholder="citizen@email.com" /></div>
+        <div><label class="form-label-bold">OFFICIAL QUERY</label><textarea id="contact-query" class="form-input-large min-h-[120px]" placeholder="Type your query here..."></textarea></div>
+      </div>
+      <div class="flex gap-4">
+        <button onclick="document.getElementById('contact-modal').remove()" class="btn-large flex-1 bg-slate-100 text-slate-500 font-black">Cancel</button>
+        <button id="contact-submit-btn" onclick="handleContactSubmit()" class="btn-large flex-1 bg-primary text-white font-black shadow-2xl shadow-primary/30">Submit Dispatch</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function handleContactSubmit() {
+  const name = document.getElementById("contact-name").value.trim();
+  const email = document.getElementById("contact-email").value.trim();
+  const query = document.getElementById("contact-query").value.trim();
+  
+  if (!name || !email || !query) return showError("contact-error", "All fields are required.");
+  
+  setLoading("contact-submit-btn", true);
+  try {
+    await api("/auth/contact", { method: "POST", body: JSON.stringify({ name, email, query }) });
+    showToast("Inquiry sent to admin successfully.");
+    document.getElementById("contact-modal").remove();
+  } catch (err) {
+    showError("contact-error", err.message);
+  } finally {
+    setLoading("contact-submit-btn", false);
+  }
+}
+
+// ─── Admin Dashboard ──────────────────────────────────────────
+async function renderAdminDashboard(container) {
+  container.innerHTML = `<div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Loading Director's Console...</p></div>`;
+  try {
+    const data = await api("/admin/complaints");
+    container.innerHTML = `
+      <div class="max-w-7xl mx-auto py-24 px-6 page-fade-in">
+        <div class="flex justify-between items-end mb-16">
+          <div><h1 class="font-display text-5xl font-black text-slate-900 tracking-tighter">Director's Console</h1></div>
+          <div class="flex gap-4"><button onclick="renderUserManagement()" class="bg-secondary text-white px-8 py-4 rounded-xl font-black">User Records</button></div>
+        </div>
+        <div class="bg-white rounded-[48px] shadow-2xl overflow-hidden" id="admin-complaints-list"></div>
+      </div>
+    `;
+    renderAdminComplaints(document.getElementById("admin-complaints-list"), data.complaints);
+  } catch (err) { container.innerHTML = `<div class="p-12 text-center text-secondary">${err.message}</div>`; }
+}
+
+function renderAdminComplaints(container, complaints) {
+  container.innerHTML = `
+    <table class="w-full">
+      <thead><tr class="bg-slate-50 text-left"><th class="px-12 py-6">ID</th><th class="px-12 py-6">Citizen</th><th class="px-12 py-6">Status</th><th class="px-12 py-6 text-right">Action</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">
+        ${complaints.map(c => `
+          <tr class="hover:bg-primary/5 transition-all">
+            <td class="px-12 py-8 font-black text-primary">#${c.id.slice(0,8).toUpperCase()}</td>
+            <td class="px-12 py-8 font-bold">${escapeHTML(c.user_name)}</td>
+            <td class="px-12 py-8">
+              <span class="px-4 py-1 rounded-full text-[10px] font-black uppercase ${c.status === 'resolved' ? 'bg-green-50 text-green-600' : c.status === 'investigating' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}">
+                ${c.status}
+              </span>
+            </td>
+            <td class="px-12 py-8 text-right flex justify-end gap-4">
+              ${c.status === 'resolved' ? `
+                <button onclick="handleReopenComplaint('${c.id}')" class="text-secondary font-black text-xs uppercase hover:underline">Reopen Investigation</button>
+              ` : ''}
+              <button onclick="showResolutionModal('${c.id}', '${escapeHTML(c.resolution_text || "")}', '${c.status}')" class="text-primary font-black uppercase text-xs">Dispatch Command</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function handleStatusUpdate(id, status) {
+  try {
+    await api(`/admin/complaints/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+    showToast("Case Status Updated Officialy");
+  } catch (err) { showToast(err.message, "error"); }
+}
+
+function showResolutionModal(id, currentText, currentStatus) {
+  const modal = document.createElement("div");
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.id = "resolution-modal";
+  modal.innerHTML = `
+    <div class="medical-card-bright p-10 max-w-2xl w-full page-fade-in relative">
+      <div class="flex justify-between items-center mb-8">
+        <h3 class="text-3xl font-black tracking-tight">Official Dispatch Bureau</h3>
+        <div id="ai-indicator" class="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-widest bg-primary/5 px-4 py-2 rounded-full">
+           <div class="w-2 h-2 bg-primary rounded-full animate-ping"></div> AI Intelligence Drafting...
+        </div>
+      </div>
+      <div id="res-error"></div>
+      
+      <div class="grid grid-cols-2 gap-6 mb-8">
+        <div>
+          <label class="form-label-bold text-[8px]">Investigation Status</label>
+          <select id="modal-status" class="form-input-large" style="padding:0.75rem 1rem;">
+            <option value="pending" ${currentStatus === 'pending' ? 'selected' : ''}>Pending</option>
+            <option value="investigating" ${currentStatus === 'investigating' ? 'selected' : ''}>Investigating</option>
+            <option value="resolved" ${currentStatus === 'resolved' ? 'selected' : ''}>Resolved</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label-bold text-[8px]">Case Identity</label>
+          <div class="bg-slate-50 px-4 py-3 rounded-2xl text-xs font-black text-slate-400">#${id.slice(0,8).toUpperCase()}</div>
+        </div>
+      </div>
+
+      <label class="form-label-bold text-[8px]">Official Resolution / Instructions</label>
+      <textarea id="modal-resolution" class="form-input-large min-h-[160px] mb-8" placeholder="AI is analyzing incident data and drafting resolution...">${currentText}</textarea>
+      
+      <div class="flex gap-4">
+        <button onclick="document.getElementById('resolution-modal').remove()" class="btn-large flex-1 bg-slate-100 text-slate-500 font-black">Cancel</button>
+        <button id="res-submit-btn" onclick="handleIntegratedDispatch('${id}')" class="btn-large flex-2 bg-primary text-white font-black shadow-xl shadow-primary/30">Submit Official Dispatch</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  // Auto-trigger AI if resolving or investigating
+  getAIResolutionSuggestion(id);
+}
+
+async function handleIntegratedDispatch(id) {
+  const status = document.getElementById("modal-status").value;
+  const text = document.getElementById("modal-resolution").value;
+  
+  if (status === 'resolved' && !text) return showError("res-error", "Resolution statement required for case closure.");
+  
+  setLoading("res-submit-btn", true);
+  try {
+    // 1. Update Status
+    await api(`/admin/complaints/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+    
+    // 2. Update Resolution (if provided or status is resolved)
+    if (text || status === 'resolved') {
+      await api(`/admin/complaints/${id}/resolve`, { method: "PATCH", body: JSON.stringify({ resolution_text: text }) });
+    }
+    
+    showToast("Official Dispatch Transmitted Successfully");
+    document.getElementById('resolution-modal').remove();
+    navigate("admin");
+  } catch (err) { showError("res-error", err.message); }
+  finally { setLoading("res-submit-btn", false); }
+}
+
+async function handleReopenComplaint(id) {
+  if (!confirm("Authorize Investigation Reopening?")) return;
+  try {
+    await api(`/admin/complaints/${id}/reopen`, { method: "PATCH" });
+    showToast("Case Investigation Reopened Officialy");
+    navigate("admin");
+  } catch (err) { showToast(err.message, "error"); }
+}
+
+async function getAIResolutionSuggestion(id) {
+  const indicator = document.getElementById("ai-indicator");
+  const textarea = document.getElementById("modal-resolution");
+  if (!indicator || !textarea) return;
+
+  indicator.classList.remove("hidden");
+  textarea.value = "";
+  
+  try {
+    const data = await api(`/admin/complaints/${id}/ai-suggest`, { method: "POST" });
+    indicator.classList.add("hidden");
+    await typeWriter(textarea, data.suggestion);
+    showToast("AI Intelligence Triage Completed", "success");
+  } catch (err) {
+    indicator.classList.add("hidden");
+    textarea.placeholder = "Type official resolution...";
+    showToast("Intelligence Triage Failed", "error");
+  }
+}
+
+function typeWriter(element, text, speed = 15) {
+  return new Promise(resolve => {
+    let i = 0;
+    function type() {
+      if (i < text.length) {
+        element.value += text.charAt(i);
+        i++;
+        element.scrollTop = element.scrollHeight;
+        setTimeout(type, speed);
+      } else {
+        resolve();
+      }
+    }
+    type();
+  });
+}
+
+// ─── Init ────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  checkSession();
+});
+
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = `<div class="bg-secondary/10 text-secondary p-6 rounded-2xl font-black mb-10 border border-secondary/20">${msg}</div>`;
+}
+
+function clearError(id) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = "";
+}
+
+function setLoading(id, loading) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) btn.dataset.orig = btn.innerHTML, btn.innerHTML = "Processing Authority Data...";
+  else btn.innerHTML = btn.dataset.orig;
+}
+
+// ─── User Management ─────────────────────────────────────────
+
+async function renderUserManagement() {
+  const mainView = document.getElementById("main-view");
+  mainView.innerHTML = `
+    <div class="max-w-7xl mx-auto py-24 px-6 page-fade-in">
+      <div class="flex justify-between items-end mb-16">
+        <div>
+          <div class="inline-flex items-center gap-2 text-secondary font-black uppercase tracking-[0.2em] text-xs mb-4">Director's Bureau</div>
+          <h1 class="font-display text-5xl font-black text-slate-900 tracking-tighter">Personnel Archives</h1>
+        </div>
+        <button onclick="showCreateUserModal()" class="bg-primary text-white px-10 py-5 rounded-[24px] font-black shadow-2xl">+ Provision Account</button>
+      </div>
+      <div class="bg-white rounded-[48px] shadow-2xl overflow-hidden" id="user-list-container">
+        <div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Synchronizing Personnel Records...</p></div>
+      </div>
     </div>
   `;
 
   try {
-    const { users } = await api("/admin/users");
-    const list = document.getElementById("users-list-container");
-
-    list.innerHTML = `
-      <table class="mgmt-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th style="text-align:right;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${users.map(u => `
-            <tr>
-              <td>
-                <div style="font-weight:600;">${escapeHTML(u.name)}</div>
-                <div style="font-size:0.7rem; color:var(--text-muted);">ID: ${u.id.substring(0, 8)}...</div>
-              </td>
-              <td>${escapeHTML(u.email)}</td>
-              <td><span class="role-badge role-${u.role}">${u.role}</span></td>
-              <td style="text-align:right;">
-                <button class="btn btn-ghost btn-sm" onclick="showEditUserModal('${u.id}', '${escapeHTML(u.name)}', '${u.role}')">Edit</button>
-                <button class="btn btn-ghost btn-sm" style="color:var(--error);" onclick="handleDeleteUser('${u.id}')">Delete</button>
+    const data = await api("/admin/users");
+    const container = document.getElementById("user-list-container");
+    container.innerHTML = `
+      <table class="w-full">
+        <thead><tr class="bg-slate-50 text-left"><th class="px-12 py-6">Official Name</th><th class="px-12 py-6">Credentials</th><th class="px-12 py-6">Designation</th><th class="px-12 py-6 text-right">Action</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">
+          ${data.users.map(u => `
+            <tr class="hover:bg-secondary/5 transition-all">
+              <td class="px-12 py-8 font-black text-slate-900">${escapeHTML(u.name)}</td>
+              <td class="px-12 py-8 font-bold text-slate-500">${escapeHTML(u.email)}</td>
+              <td class="px-12 py-8"><span class="px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-secondary text-white' : 'bg-slate-100 text-slate-500'}">${u.role}</span></td>
+              <td class="px-12 py-8 text-right flex justify-end gap-4">
+                <button onclick="showEditUserModal('${u.id}', '${escapeHTML(u.name)}', '${u.role}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-primary transition-all"><i class="fa-solid fa-pen-to-square"></i></button>
+                <button onclick="handleDeleteUser('${u.id}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-secondary transition-all"><i class="fa-solid fa-trash-can"></i></button>
               </td>
             </tr>
-          `).join("")}
+          `).join('')}
         </tbody>
       </table>
     `;
-  } catch (err) {
-    showToast(err.message, "error");
-  }
+  } catch (err) { showError("user-list-container", err.message); }
 }
 
 function showCreateUserModal() {
-  openModal(`
-    <div class="modal-header"><h3>Create New Account</h3><button class="btn btn-ghost" onclick="closeModal()">✕</button></div>
-    <div class="modal-body">
-      <div class="form-group"><label class="form-label">Full Name</label><input id="mu-name" class="input-field"></div>
-      <div class="form-group"><label class="form-label">Email</label><input id="mu-email" class="input-field"></div>
-      <div class="form-group"><label class="form-label">Password</label><input id="mu-pass" type="password" class="input-field"></div>
-      <div class="form-group">
-        <label class="form-label">Role</label>
-        <select id="mu-role" class="input-field" style="background:var(--bg-input);">
-          <option value="user">User</option>
-          <option value="admin">Admin</option>
-        </select>
+  const modal = document.createElement("div");
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.innerHTML = `
+    <div class="medical-card-bright p-12 max-w-2xl w-full">
+      <h3 class="text-3xl font-black mb-10 tracking-tight">Provision New Account</h3>
+      <div class="space-y-8 mb-10">
+        <div><label class="form-label-bold">FULL NAME</label><input id="mu-name" class="form-input-large" /></div>
+        <div><label class="form-label-bold">SECURE EMAIL</label><input id="mu-email" class="form-input-large" /></div>
+        <div><label class="form-label-bold">ACCESS PASSWORD</label><input id="mu-pass" type="password" class="form-input-large" /></div>
+        <div><label class="form-label-bold">DESIGNATION ROLE</label><select id="mu-role" class="form-input-large"><option value="user">Citizen User</option><option value="admin">Police Admin</option></select></div>
+      </div>
+      <div class="flex gap-4">
+        <button onclick="this.closest('.fixed').remove()" class="btn btn-ghost font-black">Cancel</button>
+        <button onclick="handleCreateUser()" class="btn btn-primary font-black px-12 h-[60px]">Create Profile</button>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="btn-create-u" onclick="handleCreateUser()">Create User</button>
-    </div>
-  `);
+  `;
+  document.body.appendChild(modal);
 }
 
 async function handleCreateUser() {
@@ -1000,68 +905,49 @@ async function handleCreateUser() {
   const email = document.getElementById("mu-email").value;
   const password = document.getElementById("mu-pass").value;
   const role = document.getElementById("mu-role").value;
-
-  setLoading("btn-create-u", true);
   try {
-    await api("/admin/users", {
-      method: "POST",
-      body: JSON.stringify({ name, email, password, role })
-    });
-    showToast("User created!");
-    closeModal();
+    await api("/admin/users", { method: "POST", body: JSON.stringify({ name, email, password, role }) });
+    showToast("Profile Provisioned Successfully");
+    document.querySelector('.fixed.inset-0').remove();
     renderUserManagement();
-    renderAdminDashboard(document.getElementById("app"));
   } catch (err) { showToast(err.message, "error"); }
-  finally { setLoading("btn-create-u", false); }
 }
 
 function showEditUserModal(id, name, role) {
-  openModal(`
-    <div class="modal-header"><h3>Edit User</h3><button class="btn btn-ghost" onclick="closeModal()">✕</button></div>
-    <div class="modal-body">
-      <div class="form-group"><label class="form-label">Name</label><input id="eu-name" value="${name}" class="input-field"></div>
-      <div class="form-group">
-        <label class="form-label">Role</label>
-        <select id="eu-role" class="input-field" style="background:var(--bg-input);">
-          <option value="user" ${role === 'user' ? 'selected' : ''}>User</option>
-          <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
-        </select>
+  const modal = document.createElement("div");
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.innerHTML = `
+    <div class="medical-card-bright p-12 max-w-xl w-full">
+      <h3 class="text-3xl font-black mb-10 tracking-tight">Modify Personnel Profile</h3>
+      <div class="space-y-8 mb-10">
+        <div><label class="form-label-bold">FULL NAME</label><input id="eu-name" value="${name}" class="form-input-large" /></div>
+        <div><label class="form-label-bold">DESIGNATION</label><select id="eu-role" class="form-input-large"><option value="user" ${role === 'user' ? 'selected' : ''}>Citizen User</option><option value="admin" ${role === 'admin' ? 'selected' : ''}>Police Admin</option></select></div>
+      </div>
+      <div class="flex gap-4">
+        <button onclick="this.closest('.fixed').remove()" class="btn btn-ghost font-black">Cancel</button>
+        <button onclick="handleEditUser('${id}')" class="btn btn-primary font-black px-12 h-[60px]">Save Changes</button>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="btn-edit-u" onclick="handleEditUser('${id}')">Save Changes</button>
-    </div>
-  `);
+  `;
+  document.body.appendChild(modal);
 }
 
 async function handleEditUser(id) {
   const name = document.getElementById("eu-name").value;
   const role = document.getElementById("eu-role").value;
-  setLoading("btn-edit-u", true);
   try {
-    await api(`/admin/users/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ name, role })
-    });
-    showToast("User updated");
-    closeModal();
+    await api(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ name, role }) });
+    showToast("Personnel Data Correction Applied");
+    document.querySelector('.fixed.inset-0').remove();
     renderUserManagement();
   } catch (err) { showToast(err.message, "error"); }
-  finally { setLoading("btn-edit-u", false); }
 }
 
 async function handleDeleteUser(id) {
-  if (!confirm("Are you sure?")) return;
+  if (!confirm("Authorize Access Revocation?")) return;
   try {
     await api(`/admin/users/${id}`, { method: "DELETE" });
-    showToast("User deleted");
+    showToast("Access Revoked Successfully");
     renderUserManagement();
-    renderAdminDashboard(document.getElementById("app"));
   } catch (err) { showToast(err.message, "error"); }
 }
-
-// ─── Init ────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", () => {
-  checkSession();
-});
