@@ -49,14 +49,11 @@ router.post("/send-otp", async (req, res) => {
       });
     }
 
-    // Sending in background but showing code in message for now so you can log in
-    sendOtpEmail(email, otp).catch(err => console.error("Email error:", err));
+    // Email successfully handed off to EmailJS
+    sendOtpEmail(email, otp).catch(err => console.error("EmailJS sending error:", err));
 
-    console.log(`📡 OTP [${otp}] triggered for ${email}`);
-    res.json({ 
-      message: `OTP sent! (DEBUG MODE: Your code is ${otp})`,
-      debugCode: otp 
-    });
+    console.log(`📡 OTP triggered for ${email}`);
+    res.json({ message: "OTP sent successfully! Please check your inbox (and spam folder)." });
 
   } catch (err) {
     console.error("send-otp error:", err);
