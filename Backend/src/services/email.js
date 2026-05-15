@@ -4,18 +4,16 @@ const dns = require("dns");
 // Force IPv4 for this service to avoid Render's IPv6 issues
 dns.setDefaultResultOrder("ipv4first");
 
-// Create a transporter using Gmail with explicit SMTP settings
+// Create a transporter using the Gmail service shortcut with pooling
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // Use STARTTLS (port 587) instead of SSL (port 465)
+  service: "gmail",
+  pool: true, // Use pooling to keep connections alive
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
-  requireTLS: true,
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 10000,
+  connectionTimeout: 20000, // 20 seconds
+  greetingTimeout: 20000,
 });
 
 // Verify connection on startup
