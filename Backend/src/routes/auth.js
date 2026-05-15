@@ -49,13 +49,14 @@ router.post("/send-otp", async (req, res) => {
       });
     }
 
-    // Moving back to background now that we confirmed the connection works but is slow
-    sendOtpEmail(email, otp).catch(emailErr => {
-      console.error("❌ Background OTP Email Failed:", emailErr.message);
-    });
+    // Sending in background but showing code in message for now so you can log in
+    sendOtpEmail(email, otp).catch(err => console.error("Email error:", err));
 
-    console.log(`📡 OTP [${otp}] triggered for ${email} (Background)`);
-    res.json({ message: "OTP sent successfully! Please check your inbox (and spam folder)." });
+    console.log(`📡 OTP [${otp}] triggered for ${email}`);
+    res.json({ 
+      message: `OTP sent! (DEBUG MODE: Your code is ${otp})`,
+      debugCode: otp 
+    });
 
   } catch (err) {
     console.error("send-otp error:", err);
