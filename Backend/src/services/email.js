@@ -1,48 +1,61 @@
-// c:\Users\acer\Complaints-Registration-Platform-Full-Stack\Backend\src\services\email.js
+const https = require("https");
 
 /**
  * Send an email using the EmailJS REST API.
- * This is compatible with Render's Free Tier.
+ * Using 'https' module for maximum compatibility with all Node.js versions.
  */
 async function sendOtpEmail(to, otp) {
-  const data = {
-    service_id: process.env.EMAILJS_SERVICE_ID,
-    template_id: process.env.EMAILJS_TEMPLATE_ID,
-    user_id: process.env.EMAILJS_PUBLIC_KEY,
-    accessToken: process.env.EMAILJS_PRIVATE_KEY,
-    template_params: {
-      to_email: to,
-      otp: otp,
-      to_name: to.split("@")[0], // Simple name fallback
-    },
-  };
-
-  try {
-    const response = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({
+      service_id: process.env.EMAILJS_SERVICE_ID,
+      template_id: process.env.EMAILJS_TEMPLATE_ID,
+      user_id: process.env.EMAILJS_PUBLIC_KEY,
+      accessToken: process.env.EMAILJS_PRIVATE_KEY,
+      template_params: {
+        to_email: to,
+        otp: otp,
+        user_email: to, // Added common variations just in case
+        message: `Your OTP is ${otp}`,
+      },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`EmailJS Error: ${errorText}`);
-    }
+    const options = {
+      hostname: "api.emailjs.com",
+      port: 443,
+      path: "/api/v1.0/email/send",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": data.length,
+      },
+    };
 
-    console.log(`✅ EmailJS: OTP sent to ${to}`);
-    return true;
-  } catch (error) {
-    console.error("❌ EmailJS Error:", error.message);
-    throw error;
-  }
+    const req = https.request(options, (res) => {
+      let responseBody = "";
+      res.on("data", (chunk) => (responseBody += chunk));
+      res.on("end", () => {
+        if (res.statusCode === 200) {
+          console.log(`✅ EmailJS: Success for ${to}`);
+          resolve(true);
+        } else {
+          console.error(`❌ EmailJS Error (${res.statusCode}): ${responseBody}`);
+          reject(new Error(`EmailJS failed: ${responseBody}`));
+        }
+      });
+    });
+
+    req.on("error", (error) => {
+      console.error("❌ EmailJS Request Error:", error.message);
+      reject(error);
+    });
+
+    req.write(data);
+    req.end();
+  });
 }
 
-/**
- * Send a resolution email (Optional, can be implemented if template exists)
- */
 async function sendResolutionEmail(to, resolutionText) {
-  // Logic similar to sendOtpEmail but with a different template
-  console.log("Resolution email would be sent here via EmailJS");
+  console.log("Resolution email logic here");
 }
 
 module.exports = { sendOtpEmail, sendResolutionEmail };
