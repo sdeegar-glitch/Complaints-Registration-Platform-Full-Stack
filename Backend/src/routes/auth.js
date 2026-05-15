@@ -49,13 +49,18 @@ router.post("/send-otp", async (req, res) => {
       });
     }
 
-    // Send OTP email in background to avoid blocking the HTTP response and causing timeouts
-    sendOtpEmail(email, otp).catch(emailErr => {
-      console.error("❌ Background OTP Email Failed:", emailErr.message);
-    });
-
-    console.log(`📡 OTP [${otp}] triggered for ${email} (Background)`);
-    res.json({ message: "OTP sent successfully! Please check your inbox (and spam folder)." });
+    // Send OTP email - Awaiting for debugging purposes to see the error on Render
+    try {
+      await sendOtpEmail(email, otp);
+      console.log(`📡 OTP [${otp}] sent to ${email}`);
+      res.json({ message: "OTP sent successfully! Please check your inbox (and spam folder)." });
+    } catch (emailErr) {
+      console.error("❌ OTP Email Failed:", emailErr.message);
+      res.status(500).json({ 
+        error: "Failed to send OTP email.", 
+        details: emailErr.message // This will help us see the exact error on the hosted server
+      });
+    }
 
   } catch (err) {
     console.error("send-otp error:", err);
