@@ -4,15 +4,18 @@ const dns = require("dns");
 // Force IPv4 for this service to avoid Render's IPv6 issues
 dns.setDefaultResultOrder("ipv4first");
 
-// Create a transporter using the Gmail service shortcut with pooling
+// Create a transporter using Gmail with strict IPv4 forcing
 const transporter = nodemailer.createTransport({
-  service: "gmail",
-  pool: true, // Use pooling to keep connections alive
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // Use STARTTLS
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
-  connectionTimeout: 20000, // 20 seconds
+  family: 4, // CRITICAL: Force IPv4 only to avoid Render's ENETUNREACH error
+  requireTLS: true,
+  connectionTimeout: 20000,
   greetingTimeout: 20000,
 });
 
