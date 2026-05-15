@@ -1,22 +1,15 @@
 const nodemailer = require("nodemailer");
 
-// Create a persistent transporter using the Gmail service preset with strict timeouts
+// Create a transporter using Gmail service
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
-  connectionTimeout: 15000, // 15 seconds
-  greetingTimeout: 15000,
-  socketTimeout: 15000,
 });
 
-// Verify connection on startup
-transporter.verify((error) => {
-  if (error) console.error("❌ SMTP Connection Error:", error.message);
-  else console.log("✅ SMTP Server is ready (Persistent Connection Active)");
-});
+// No startup verify to prevent boot-time hangs on cloud hosts
 
 /**
  * Send an OTP email to the given address.

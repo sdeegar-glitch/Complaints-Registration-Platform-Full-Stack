@@ -34,7 +34,15 @@ async function api(path, options = {}) {
     throw new Error("UNAUTHORIZED_SILENT");
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    // If response is not JSON (like a 502 HTML page from Render)
+    if (!res.ok) throw new Error(`Server Error (${res.status}). Please try again later.`);
+    throw new Error("Invalid response from server.");
+  }
+
   if (!res.ok) throw new Error(data.error || "Something went wrong.");
   return data;
 }
