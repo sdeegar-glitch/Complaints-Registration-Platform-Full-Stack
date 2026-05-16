@@ -1,5 +1,11 @@
 const nodemailer = require("nodemailer");
 const { google } = require("googleapis");
+const dns = require("dns");
+
+// Force IPv4 for stable cloud connectivity (resolves ENETUNREACH/ETIMEDOUT on Render)
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 /**
  * Authority Dispatch Bureau: OAuth2 Email Service
@@ -32,11 +38,11 @@ async function createTransporter() {
       });
     });
 
-    console.log("✅ Access Token Secured. Establishing SMTP Bureau via Port 587...");
+    console.log("✅ Access Token Secured. Establishing SMTP Bureau via Port 465 (Secure)...");
     return nodemailer.createTransport({
       host: "smtp.gmail.com",
-      port: 587,
-      secure: false, // Use STARTTLS for better cloud compatibility
+      port: 465,
+      secure: true, // Use SSL/TLS for maximum security and stability
       auth: {
         type: "OAuth2",
         user: process.env.GMAIL_USER,
@@ -46,7 +52,7 @@ async function createTransporter() {
         refreshToken: process.env.GMAIL_REFRESH_TOKEN,
       },
       tls: {
-        rejectUnauthorized: false // Ensures connection stability on some cloud platforms
+        rejectUnauthorized: false
       }
     });
   } catch (error) {
