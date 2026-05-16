@@ -7,6 +7,7 @@ const { google } = require("googleapis");
  */
 
 async function createTransporter() {
+  console.log("📡 Initializing OAuth2 Transporter Bureau...");
   try {
     const OAuth2 = google.auth.OAuth2;
     const oauth2Client = new OAuth2(
@@ -15,20 +16,23 @@ async function createTransporter() {
       "https://developers.google.com/oauthplayground"
     );
 
+    console.log("🔑 Setting credentials with Refresh Token...");
     oauth2Client.setCredentials({
       refresh_token: process.env.GMAIL_REFRESH_TOKEN,
     });
 
+    console.log("⏳ Requesting fresh Access Token...");
     const accessToken = await new Promise((resolve, reject) => {
       oauth2Client.getAccessToken((err, token) => {
         if (err) {
-          console.error("❌ OAuth2 Token Error:", err);
-          reject("Failed to create access token");
+          console.error("❌ OAuth2 Token Error Details:", err.response ? err.response.data : err);
+          reject("Failed to create access token: " + (err.response ? err.response.data.error_description : err.message));
         }
         resolve(token);
       });
     });
 
+    console.log("✅ Access Token Secured. Establishing SMTP Bureau...");
     return nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -41,7 +45,7 @@ async function createTransporter() {
       },
     });
   } catch (error) {
-    console.error("❌ Transporter Initialization Failed:", error);
+    console.error("❌ Transporter Initialization Failed:", error.message || error);
     throw error;
   }
 }

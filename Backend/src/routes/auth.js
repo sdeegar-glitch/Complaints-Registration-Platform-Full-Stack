@@ -97,6 +97,7 @@ router.post("/verify-otp", async (req, res) => {
  * Verifies the OTP and sets the password.
  */
 router.post("/register", async (req, res) => {
+  console.log(`📡 Registration Bureau: Finalizing enrollment for ${req.body.email}...`);
   try {
     const { email, otp, password } = req.body;
 
@@ -123,10 +124,11 @@ router.post("/register", async (req, res) => {
     }
 
     if (new Date() > new Date(user.otp_expiry)) {
+      console.log("❌ OTP Expired");
       return res.status(400).json({ error: "OTP has expired. Please request a new one." });
     }
 
-    // Mark user as verified and save password (plain text as per requirements)
+    console.log("💾 Updating Personnel Database...");
     await db
       .update(users)
       .set({
@@ -137,10 +139,11 @@ router.post("/register", async (req, res) => {
       })
       .where(eq(users.email, email));
 
+    console.log("✅ Personnel Profile Finalized.");
     res.json({ message: "Registration successful! You can now log in." });
   } catch (err) {
-    console.error("register error:", err);
-    res.status(500).json({ error: "Registration failed. Please try again." });
+    console.error("🔥 CRITICAL REGISTRATION ERROR:", err);
+    res.status(500).json({ error: "Registration failed: " + err.message });
   }
 });
 

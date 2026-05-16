@@ -245,7 +245,7 @@ function renderRegisterPage(container) {
             <p class="font-black text-slate-900 text-lg tracking-tight" id="reg-email-display"></p>
           </div>
           <div class="grid grid-cols-6 gap-3 mb-8">
-            ${[0,1,2,3,4,5].map(i => `<input class="otp-cell" type="text" maxlength="1" id="otp-${i}" style="height:50px;" />`).join("")}
+            ${[0,1,2,3,4,5].map(i => `<input class="otp-cell" type="text" maxlength="1" id="otp-${i}" style="height:50px;" aria-label="OTP Digit ${i + 1}" />`).join("")}
           </div>
           <button class="w-full btn-large bg-primary text-white shadow-2xl h-[60px]" id="reg-verify-otp-btn" onclick="handleVerifyOtpStep()">Verify Credentials</button>
         </div>
@@ -273,6 +273,16 @@ function setupOtpInputs() {
     });
     input.addEventListener("keydown", (e) => {
       if (e.key === "Backspace" && !e.target.value && i > 0) inputs[i - 1].focus();
+    });
+    input.addEventListener("paste", (e) => {
+      const data = e.clipboardData.getData("text").trim();
+      if (data.length === 6 && /^\d+$/.test(data)) {
+        data.split("").forEach((char, idx) => {
+          if (inputs[idx]) inputs[idx].value = char;
+        });
+        inputs[5].focus();
+      }
+      e.preventDefault();
     });
   });
 }
