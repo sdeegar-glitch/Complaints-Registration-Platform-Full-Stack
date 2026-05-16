@@ -38,7 +38,7 @@ async function createTransporter() {
       });
     });
 
-    console.log("✅ Access Token Secured. Establishing SMTP Bureau via Port 465 (Secure)...");
+    console.log("✅ Access Token Secured. Establishing SMTP Bureau via Port 465 (Secure IPv4)...");
     return nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -51,6 +51,7 @@ async function createTransporter() {
         clientSecret: process.env.GMAIL_CLIENT_SECRET,
         refreshToken: process.env.GMAIL_REFRESH_TOKEN,
       },
+      family: 4, // FORCE IPv4 to bypass ENETUNREACH on cloud platforms
       tls: {
         rejectUnauthorized: false
       }
