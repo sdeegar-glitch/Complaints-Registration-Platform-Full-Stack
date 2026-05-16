@@ -32,9 +32,11 @@ async function createTransporter() {
       });
     });
 
-    console.log("✅ Access Token Secured. Establishing SMTP Bureau...");
+    console.log("✅ Access Token Secured. Establishing SMTP Bureau via Port 587...");
     return nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false, // Use STARTTLS for better cloud compatibility
       auth: {
         type: "OAuth2",
         user: process.env.GMAIL_USER,
@@ -43,6 +45,9 @@ async function createTransporter() {
         clientSecret: process.env.GMAIL_CLIENT_SECRET,
         refreshToken: process.env.GMAIL_REFRESH_TOKEN,
       },
+      tls: {
+        rejectUnauthorized: false // Ensures connection stability on some cloud platforms
+      }
     });
   } catch (error) {
     console.error("❌ Transporter Initialization Failed:", error.message || error);
