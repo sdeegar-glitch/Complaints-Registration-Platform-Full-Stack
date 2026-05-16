@@ -1,106 +1,125 @@
-const https = require("https");
+const nodemailer = require("nodemailer");
+const { google } = require("googleapis");
 
 /**
- * Send an email using the EmailJS REST API.
- * Using 'https' module for maximum compatibility with all Node.js versions.
+ * Authority Dispatch Bureau: OAuth2 Email Service
+ * Handles secure transmission of OTPs and Resolutions via Google OAuth2.
  */
-async function sendOtpEmail(to, otp) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({
-      service_id: process.env.EMAILJS_SERVICE_ID,
-      template_id: process.env.EMAILJS_TEMPLATE_ID,
-      user_id: process.env.EMAILJS_PUBLIC_KEY,
-      accessToken: process.env.EMAILJS_PRIVATE_KEY,
-      template_params: {
-        to_email: to,
-        otp: otp,
-        user_email: to,
-        email: to,
-        recipient: to,
-        send_to: to,
-        message: `Your OTP is ${otp}`,
-      },
+
+async function createTransporter() {
+  try {
+    const OAuth2 = google.auth.OAuth2;
+    const oauth2Client = new OAuth2(
+      process.env.GMAIL_CLIENT_ID,
+      process.env.GMAIL_CLIENT_SECRET,
+      "https://developers.google.com/oauthplayground"
+    );
+
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN,
     });
 
-    const options = {
-      hostname: "api.emailjs.com",
-      port: 443,
-      path: "/api/v1.0/email/send",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": data.length,
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let responseBody = "";
-      res.on("data", (chunk) => (responseBody += chunk));
-      res.on("end", () => {
-        if (res.statusCode === 200) {
-          console.log(`✅ EmailJS: Success for ${to}`);
-          resolve(true);
-        } else {
-          console.error(`❌ EmailJS Error (${res.statusCode}): ${responseBody}`);
-          reject(new Error(`EmailJS failed: ${responseBody}`));
+    const accessToken = await new Promise((resolve, reject) => {
+      oauth2Client.getAccessToken((err, token) => {
+        if (err) {
+          console.error("❌ OAuth2 Token Error:", err);
+          reject("Failed to create access token");
         }
+        resolve(token);
       });
     });
 
-    req.on("error", (error) => {
-      console.error("❌ EmailJS Request Error:", error.message);
-      reject(error);
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        type: "OAuth2",
+        user: process.env.GMAIL_USER,
+        accessToken,
+        clientId: process.env.GMAIL_CLIENT_ID,
+        clientSecret: process.env.GMAIL_CLIENT_SECRET,
+        refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+      },
     });
+  } catch (error) {
+    console.error("❌ Transporter Initialization Failed:", error);
+    throw error;
+  }
+}
 
-    req.write(data);
-    req.end();
-  });
+async function sendOtpEmail(to, otp) {
+  try {
+    const transporter = await createTransporter();
+    const mailOptions = {
+      from: `"UP Police Authority" <${process.env.GMAIL_USER}>`,
+      to,
+      subject: "Authority Identity Verification",
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <h2 style="color: #003366;">Identity Verification Bureau</h2>
+          <p>You have requested access to the <strong>Police Grievance Portal</strong>.</p>
+          <div style="background: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+            <span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #C8102E;">${otp}</span>
+          </div>
+          <p style="font-size: 12px; color: #64748b;">This code will expire shortly. Do not share this token with anyone.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ OAuth2 Dispatch: OTP Success for ${to}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ OAuth2 OTP Error for ${to}:`, error.message);
+    throw error;
+  }
 }
 
 async function sendInquiryEmail(name, fromEmail, query) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({
-      service_id: process.env.EMAILJS_SERVICE_ID,
-      template_id: process.env.EMAILJS_TEMPLATE_ID,
-      user_id: process.env.EMAILJS_PUBLIC_KEY,
-      accessToken: process.env.EMAILJS_PRIVATE_KEY,
-      template_params: {
-        to_email: "devtshq@gmail.com",
-        from_name: name,
-        from_email: fromEmail,
-        message: `Official Inquiry Received:\n\nFrom: ${name} (${fromEmail})\n\nQuery: ${query}`,
-      },
-    });
-
-    const options = {
-      hostname: "api.emailjs.com",
-      port: 443,
-      path: "/api/v1.0/email/send",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": data.length,
-      },
+  try {
+    const transporter = await createTransporter();
+    const mailOptions = {
+      from: `"Inquiry Desk" <${process.env.GMAIL_USER}>`,
+      to: "devtshq@gmail.com",
+      subject: `Official Inquiry: ${name}`,
+      text: `Official Inquiry Received:\n\nFrom: ${name} (${fromEmail})\n\nQuery: ${query}`,
     };
 
-    const req = https.request(options, (res) => {
-      if (res.statusCode === 200) {
-        console.log(`✅ Inquiry Dispatch: Success for ${fromEmail}`);
-        resolve(true);
-      } else {
-        reject(new Error(`Inquiry failed: ${res.statusCode}`));
-      }
-    });
-
-    req.on("error", (error) => reject(error));
-    req.write(data);
-    req.end();
-  });
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ OAuth2 Dispatch: Inquiry Success for ${fromEmail}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ OAuth2 Inquiry Error for ${fromEmail}:`, error.message);
+    throw error;
+  }
 }
 
-async function sendResolutionEmail(to, resolutionText) {
-  console.log(`📡 Resolution dispatched for ${to}: ${resolutionText}`);
-  return true;
+async function sendResolutionEmail(to, userName, resolutionText) {
+  try {
+    const transporter = await createTransporter();
+    const mailOptions = {
+      from: `"Official Resolution Dispatch" <${process.env.GMAIL_USER}>`,
+      to,
+      subject: "Official Case Resolution Dispatch",
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <h2 style="color: #003366;">Official Authority Resolution</h2>
+          <p>Dear ${userName},</p>
+          <p>Following a thorough investigation, an official resolution has been dispatched regarding your grievance:</p>
+          <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0;">
+            <p style="font-style: italic; color: #064e3b;">"${resolutionText}"</p>
+          </div>
+          <p style="font-size: 12px; color: #64748b;">This investigation is now officially closed.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ OAuth2 Dispatch: Resolution Success for ${to}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ OAuth2 Resolution Error for ${to}:`, error.message);
+    throw error;
+  }
 }
 
 module.exports = { sendOtpEmail, sendResolutionEmail, sendInquiryEmail };
