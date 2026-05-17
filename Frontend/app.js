@@ -80,13 +80,13 @@ function renderNavbar() {
   const isAdmin = currentUser?.role === "admin";
 
   nav.innerHTML = `
-    <div class="max-w-7xl mx-auto px-8 h-full flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-6 lg:px-8 h-full flex items-center justify-between relative">
       <div class="flex items-center gap-12">
-        <a href="javascript:void(0)" onclick="navigate('home')" class="flex items-center gap-4 group">
-          <div class="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform">
-             <i class="fa-solid fa-shield-halved text-xl"></i>
+        <a href="javascript:void(0)" onclick="navigate('home')" class="flex items-center gap-3 sm:gap-4 group">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform">
+             <i class="fa-solid fa-shield-halved text-lg sm:text-xl"></i>
           </div>
-          <div class="font-display font-black text-2xl tracking-tighter text-slate-900">PoliceGrievance</div>
+          <div class="font-display font-black text-xl sm:text-2xl tracking-tighter text-slate-900">PoliceGrievance</div>
         </a>
         <div class="hidden md:flex items-center gap-8">
           <a href="javascript:void(0)" onclick="navigate('home')" class="nav-link font-bold text-slate-500 hover:text-primary transition-colors">Home</a>
@@ -94,10 +94,12 @@ function renderNavbar() {
           <a href="javascript:void(0)" onclick="navigate('contact')" class="nav-link font-bold text-slate-500 hover:text-primary transition-colors">Contact</a>
         </div>
       </div>
-      <div class="flex items-center gap-6">
+      
+      <!-- Desktop Navigation Actions -->
+      <div class="hidden md:flex items-center gap-6">
         ${isLoggedIn ? `
-          ${isAdmin ? `<a href="javascript:void(0)" onclick="navigate('admin')" class="btn btn-ghost text-secondary font-black">Director's Console</a>` : ''}
-          <a href="javascript:void(0)" onclick="navigate('my-complaints')" class="btn btn-ghost font-black">Dashboard</a>
+          ${isAdmin ? `<a href="javascript:void(0)" onclick="navigate('admin')" class="btn btn-ghost text-secondary font-black hover:text-secondary/80">Director's Console</a>` : ''}
+          <a href="javascript:void(0)" onclick="navigate('my-complaints')" class="btn btn-ghost font-black hover:text-primary/80">Dashboard</a>
           <button onclick="handleLogout()" class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 hover:bg-secondary hover:text-white transition-all shadow-sm">
             <i class="fa-solid fa-power-off"></i>
           </button>
@@ -106,9 +108,73 @@ function renderNavbar() {
           <button onclick="navigate('register')" class="bg-primary text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-primary/20 hover:scale-105 transition-all">Join Portal</button>
         `}
       </div>
+
+      <!-- Mobile Hamburger Button -->
+      <div class="flex md:hidden items-center gap-4">
+        <button id="mobile-menu-btn" class="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-200 transition-all">
+          <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Mobile Dropdown Menu Container -->
+      <div id="mobile-dropdown" class="hidden absolute top-full left-0 w-full bg-white/95 backdrop-blur-xl shadow-2xl border-t border-slate-100 px-6 py-8 flex flex-col gap-6 md:hidden transition-all duration-300 ease-in-out z-[999] rounded-b-[24px]">
+        <div class="flex flex-col gap-4">
+          <a href="javascript:void(0)" onclick="closeMobileMenu(); navigate('home')" class="font-black text-slate-700 hover:text-primary text-lg flex items-center gap-3"><i class="fa-solid fa-house text-slate-400"></i> Home</a>
+          <a href="javascript:void(0)" onclick="closeMobileMenu(); navigate('departments')" class="font-black text-slate-700 hover:text-primary text-lg flex items-center gap-3"><i class="fa-solid fa-building-shield text-slate-400"></i> Departments</a>
+          <a href="javascript:void(0)" onclick="closeMobileMenu(); navigate('contact')" class="font-black text-slate-700 hover:text-primary text-lg flex items-center gap-3"><i class="fa-solid fa-envelope text-slate-400"></i> Contact</a>
+        </div>
+        <hr class="border-slate-100" />
+        <div class="flex flex-col gap-4">
+          ${isLoggedIn ? `
+            ${isAdmin ? `<a href="javascript:void(0)" onclick="closeMobileMenu(); navigate('admin')" class="font-black text-secondary text-lg flex items-center gap-3"><i class="fa-solid fa-user-shield text-secondary"></i> Director's Console</a>` : ''}
+            <a href="javascript:void(0)" onclick="closeMobileMenu(); navigate('my-complaints')" class="font-black text-primary text-lg flex items-center gap-3"><i class="fa-solid fa-clipboard-list text-primary"></i> Dashboard</a>
+            <button onclick="closeMobileMenu(); handleLogout()" class="w-full bg-slate-100 text-slate-700 py-4 rounded-xl font-black flex items-center justify-center gap-3 hover:bg-secondary hover:text-white transition-all">
+              <i class="fa-solid fa-power-off"></i> Sign Out
+            </button>
+          ` : `
+            <a href="javascript:void(0)" onclick="closeMobileMenu(); navigate('login')" class="font-black text-slate-900 hover:text-primary text-lg flex items-center gap-3"><i class="fa-solid fa-right-to-bracket text-slate-400"></i> Sign In</a>
+            <button onclick="closeMobileMenu(); navigate('register')" class="w-full bg-primary text-white py-4 rounded-xl font-black shadow-lg shadow-primary/20 flex items-center justify-center gap-3">
+              <i class="fa-solid fa-user-plus"></i> Join Portal
+            </button>
+          `}
+        </div>
+      </div>
     </div>
   `;
+
+  // Attach Menu Toggle Listener
+  const menuBtn = document.getElementById("mobile-menu-btn");
+  const dropdown = document.getElementById("mobile-dropdown");
+  if (menuBtn && dropdown) {
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isHidden = dropdown.classList.contains("hidden");
+      if (isHidden) {
+        dropdown.classList.remove("hidden");
+        menuBtn.innerHTML = `<i class="fa-solid fa-xmark text-lg"></i>`;
+      } else {
+        dropdown.classList.add("hidden");
+        menuBtn.innerHTML = `<i class="fa-solid fa-bars text-lg"></i>`;
+      }
+    });
+
+    // Close on click outside
+    document.addEventListener("click", (e) => {
+      if (!dropdown.contains(e.target) && !menuBtn.contains(e.target)) {
+        dropdown.classList.add("hidden");
+        menuBtn.innerHTML = `<i class="fa-solid fa-bars text-lg"></i>`;
+      }
+    });
+  }
 }
+
+function closeMobileMenu() {
+  const dropdown = document.getElementById("mobile-dropdown");
+  const menuBtn = document.getElementById("mobile-menu-btn");
+  if (dropdown) dropdown.classList.add("hidden");
+  if (menuBtn) menuBtn.innerHTML = `<i class="fa-solid fa-bars text-lg"></i>`;
+}
+
 
 function showToast(msg, type = "success") {
   const t = document.createElement("div");
@@ -404,18 +470,18 @@ async function handleSubmitComplaint() {
 // ─── Citizen Dashboard ───────────────────────────────────────
 async function renderMyComplaintsPage(container) {
   container.innerHTML = `
-    <div class="max-w-7xl mx-auto py-24 px-6 page-fade-in">
-      <div class="flex justify-between items-end mb-16">
-        <div><h1 class="font-display text-5xl font-black text-slate-900 tracking-tighter">Citizen Command Center</h1></div>
-        <button class="bg-primary text-white px-10 py-5 rounded-[24px] font-black" onclick="navigate('submit')">+ File New Incident</button>
+    <div class="max-w-7xl mx-auto py-12 sm:py-24 px-4 sm:px-6 page-fade-in">
+      <div class="flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-end mb-10 sm:mb-16">
+        <div><h1 class="font-display text-4xl sm:text-5xl font-black text-slate-900 tracking-tighter">Citizen Command Center</h1></div>
+        <button class="w-full sm:w-auto bg-primary text-white px-8 sm:px-10 py-4 sm:py-5 rounded-[20px] sm:rounded-[24px] font-black text-center shadow-lg hover:scale-105 active:scale-95 transition-all" onclick="navigate('submit')">+ File New Incident</button>
       </div>
-      <div class="grid grid-cols-3 gap-10 mb-16">
-        <div class="medical-card-bright p-10">Total: <span id="dash-stat-total">0</span></div>
-        <div class="medical-card-bright p-10">Active: <span id="dash-stat-pending">0</span></div>
-        <div class="medical-card-bright p-10">Resolved: <span id="dash-stat-resolved">0</span></div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-10 mb-10 sm:mb-16">
+        <div class="medical-card-bright p-6 sm:p-10 font-bold text-slate-500">Total Incidents: <span id="dash-stat-total" class="block font-black text-slate-900 text-3xl sm:text-4xl mt-2">0</span></div>
+        <div class="medical-card-bright p-6 sm:p-10 font-bold text-slate-500">Active Cases: <span id="dash-stat-pending" class="block font-black text-secondary text-3xl sm:text-4xl mt-2">0</span></div>
+        <div class="medical-card-bright p-6 sm:p-10 font-bold text-slate-500">Resolved Files: <span id="dash-stat-resolved" class="block font-black text-success text-3xl sm:text-4xl mt-2">0</span></div>
       </div>
-      <div class="bg-white rounded-[48px] shadow-2xl overflow-hidden" id="my-complaints-list">
-        <div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Synchronizing Databases...</p></div>
+      <div class="bg-white rounded-[24px] sm:rounded-[48px] shadow-2xl overflow-hidden" id="my-complaints-list">
+        <div class="p-16 sm:p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Synchronizing Databases...</p></div>
       </div>
     </div>
   `;
@@ -441,10 +507,10 @@ function renderComplaintsTable(container, complaints) {
       <tbody class="divide-y divide-slate-100">
         ${complaints.map(c => `
           <tr class="hover:bg-primary/5 transition-all">
-            <td class="px-8 py-6 font-black text-primary">#${c.id.slice(0,8).toUpperCase()}</td>
-            <td class="px-8 py-6 font-bold truncate max-w-[300px]">${escapeHTML(c.complaint_text)}</td>
-            <td class="px-8 py-6 text-center"><span class="px-4 py-1 rounded-full text-[10px] font-black uppercase ${c.status === 'resolved' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}">${c.status}</span></td>
-            <td class="px-8 py-6 text-right"><button onclick="showIncidentDetailsModal('${c.id}')" class="text-primary font-black"><i class="fa-solid fa-arrow-right"></i></button></td>
+            <td class="px-8 py-6 font-black text-primary" data-label="ID">#${c.id.slice(0,8).toUpperCase()}</td>
+            <td class="px-8 py-6 font-bold truncate max-w-[300px]" data-label="Incident">${escapeHTML(c.complaint_text)}</td>
+            <td class="px-8 py-6 text-left sm:text-center" data-label="Status"><span class="px-4 py-1 rounded-full text-[10px] font-black uppercase ${c.status === 'resolved' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}">${c.status}</span></td>
+            <td class="px-8 py-6 text-right flex justify-end gap-2" data-label="Action"><button onclick="showIncidentDetailsModal('${c.id}')" class="text-primary font-black"><i class="fa-solid fa-arrow-right"></i></button></td>
           </tr>
         `).join('')}
       </tbody>
@@ -454,9 +520,9 @@ function renderComplaintsTable(container, complaints) {
 
 async function showIncidentDetailsModal(id) {
   const modal = document.createElement("div");
-  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 overflow-y-auto p-4 sm:p-6 flex justify-center items-start sm:items-center";
   modal.id = "incident-modal";
-  modal.innerHTML = `<div class="medical-card-bright p-20 text-center w-full max-w-xl"><div class="spinner mx-auto mb-6"></div><p class="font-black">Retrieving Official Dossier...</p></div>`;
+  modal.innerHTML = `<div class="medical-card-bright p-10 text-center w-full max-w-xl my-8"><div class="spinner mx-auto mb-6"></div><p class="font-black">Retrieving Official Dossier...</p></div>`;
   document.body.appendChild(modal);
 
   try {
@@ -466,7 +532,7 @@ async function showIncidentDetailsModal(id) {
     if (!c) throw new Error("Incomplete dossier record received.");
 
     modal.innerHTML = `
-      <div class="medical-card-bright p-10 max-w-2xl w-full page-fade-in relative overflow-hidden">
+      <div class="medical-card-bright p-6 sm:p-10 max-w-2xl w-full page-fade-in relative overflow-hidden my-8">
         <div class="absolute top-0 left-0 w-full h-2 bg-primary"></div>
         <div class="flex justify-between items-start mb-8">
           <div>
@@ -619,10 +685,10 @@ function renderContactPage(container) {
 
 function showContactModal() {
   const modal = document.createElement("div");
-  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 overflow-y-auto p-4 sm:p-6 flex justify-center items-start sm:items-center";
   modal.id = "contact-modal";
   modal.innerHTML = `
-    <div class="medical-card-bright p-10 max-w-xl w-full page-fade-in">
+    <div class="medical-card-bright p-6 sm:p-10 max-w-xl w-full page-fade-in my-8">
       <h3 class="text-3xl font-black mb-8 tracking-tight">Official Inquiry Dispatch</h3>
       <div id="contact-error"></div>
       <div class="space-y-6 mb-8">
@@ -660,16 +726,16 @@ async function handleContactSubmit() {
 
 // ─── Admin Dashboard ──────────────────────────────────────────
 async function renderAdminDashboard(container) {
-  container.innerHTML = `<div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Loading Director's Console...</p></div>`;
+  container.innerHTML = `<div class="p-16 sm:p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Loading Director's Console...</p></div>`;
   try {
     const data = await api("/admin/complaints");
     container.innerHTML = `
-      <div class="max-w-7xl mx-auto py-24 px-6 page-fade-in">
-        <div class="flex justify-between items-end mb-16">
-          <div><h1 class="font-display text-5xl font-black text-slate-900 tracking-tighter">Director's Console</h1></div>
-          <div class="flex gap-4"><button onclick="renderUserManagement()" class="bg-secondary text-white px-8 py-4 rounded-xl font-black">User Records</button></div>
+      <div class="max-w-7xl mx-auto py-12 sm:py-24 px-4 sm:px-6 page-fade-in">
+        <div class="flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-end mb-10 sm:mb-16">
+          <div><h1 class="font-display text-4xl sm:text-5xl font-black text-slate-900 tracking-tighter">Director's Console</h1></div>
+          <div class="w-full sm:w-auto flex gap-4"><button onclick="renderUserManagement()" class="w-full sm:w-auto bg-secondary text-white px-8 py-4 rounded-xl font-black text-center shadow-lg hover:scale-105 active:scale-95 transition-all">User Records</button></div>
         </div>
-        <div class="bg-white rounded-[48px] shadow-2xl overflow-hidden" id="admin-complaints-list"></div>
+        <div class="bg-white rounded-[24px] sm:rounded-[48px] shadow-2xl overflow-hidden" id="admin-complaints-list"></div>
       </div>
     `;
     renderAdminComplaints(document.getElementById("admin-complaints-list"), data.complaints);
@@ -712,10 +778,10 @@ async function handleStatusUpdate(id, status) {
 
 function showResolutionModal(id, currentText, currentStatus) {
   const modal = document.createElement("div");
-  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 overflow-y-auto p-4 sm:p-6 flex justify-center items-start sm:items-center";
   modal.id = "resolution-modal";
   modal.innerHTML = `
-    <div class="medical-card-bright p-10 max-w-2xl w-full page-fade-in relative">
+    <div class="medical-card-bright p-6 sm:p-10 max-w-2xl w-full page-fade-in relative my-8">
       <div class="flex justify-between items-center mb-8">
         <h3 class="text-3xl font-black tracking-tight">Official Dispatch Bureau</h3>
         <div id="ai-indicator" class="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-widest bg-primary/5 px-4 py-2 rounded-full">
@@ -851,16 +917,16 @@ function setLoading(id, loading) {
 async function renderUserManagement() {
   const mainView = document.getElementById("main-view");
   mainView.innerHTML = `
-    <div class="max-w-7xl mx-auto py-24 px-6 page-fade-in">
-      <div class="flex justify-between items-end mb-16">
+    <div class="max-w-7xl mx-auto py-12 sm:py-24 px-4 sm:px-6 page-fade-in">
+      <div class="flex flex-col sm:flex-row gap-6 justify-between items-start sm:items-end mb-10 sm:mb-16">
         <div>
           <div class="inline-flex items-center gap-2 text-secondary font-black uppercase tracking-[0.2em] text-xs mb-4">Director's Bureau</div>
-          <h1 class="font-display text-5xl font-black text-slate-900 tracking-tighter">Personnel Archives</h1>
+          <h1 class="font-display text-4xl sm:text-5xl font-black text-slate-900 tracking-tighter">Personnel Archives</h1>
         </div>
-        <button onclick="showCreateUserModal()" class="bg-primary text-white px-10 py-5 rounded-[24px] font-black shadow-2xl">+ Provision Account</button>
+        <button onclick="showCreateUserModal()" class="w-full sm:w-auto bg-primary text-white px-8 sm:px-10 py-4 sm:py-5 rounded-[20px] sm:rounded-[24px] font-black shadow-2xl text-center hover:scale-105 active:scale-95 transition-all">+ Provision Account</button>
       </div>
-      <div class="bg-white rounded-[48px] shadow-2xl overflow-hidden" id="user-list-container">
-        <div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Synchronizing Personnel Records...</p></div>
+      <div class="bg-white rounded-[24px] sm:rounded-[48px] shadow-2xl overflow-hidden" id="user-list-container">
+        <div class="p-16 sm:p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Synchronizing Personnel Records...</p></div>
       </div>
     </div>
   `;
@@ -878,8 +944,8 @@ async function renderUserManagement() {
               <td class="px-12 py-8 font-bold text-slate-500" data-label="Email">${escapeHTML(u.email)}</td>
               <td class="px-12 py-8" data-label="Role"><span class="px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-secondary text-white' : 'bg-slate-100 text-slate-500'}">${u.role}</span></td>
               <td class="px-12 py-8 text-right flex justify-end gap-4" data-label="Action">
-                <button onclick="showEditUserModal('${u.id}', '${escapeHTML(u.name)}', '${u.role}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-primary transition-all"><i class="fa-solid fa-pen-to-square"></i></button>
-                <button onclick="handleDeleteUser('${u.id}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-secondary transition-all"><i class="fa-solid fa-trash-can"></i></button>
+                <button onclick="showEditUserModal('${u.id}', '${escapeHTML(u.name)}', '${u.role}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-primary transition-all flex items-center justify-center"><i class="fa-solid fa-pen-to-square"></i></button>
+                <button onclick="handleDeleteUser('${u.id}')" class="w-10 h-10 bg-slate-50 rounded-xl text-slate-400 hover:text-secondary transition-all flex items-center justify-center"><i class="fa-solid fa-trash-can"></i></button>
               </td>
             </tr>
           `).join('')}
@@ -891,19 +957,19 @@ async function renderUserManagement() {
 
 function showCreateUserModal() {
   const modal = document.createElement("div");
-  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 overflow-y-auto p-4 sm:p-6 flex justify-center items-start sm:items-center";
   modal.innerHTML = `
-    <div class="medical-card-bright p-12 max-w-2xl w-full">
-      <h3 class="text-3xl font-black mb-10 tracking-tight">Provision New Account</h3>
-      <div class="space-y-8 mb-10">
+    <div class="medical-card-bright p-6 sm:p-10 max-w-2xl w-full my-8">
+      <h3 class="text-3xl font-black mb-8 sm:mb-10 tracking-tight">Provision New Account</h3>
+      <div class="space-y-6 sm:space-y-8 mb-8 sm:mb-10">
         <div><label class="form-label-bold">FULL NAME</label><input id="mu-name" class="form-input-large" /></div>
         <div><label class="form-label-bold">SECURE EMAIL</label><input id="mu-email" class="form-input-large" /></div>
         <div><label class="form-label-bold">ACCESS PASSWORD</label><input id="mu-pass" type="password" class="form-input-large" /></div>
         <div><label class="form-label-bold">DESIGNATION ROLE</label><select id="mu-role" class="form-input-large"><option value="user">Citizen User</option><option value="admin">Police Admin</option></select></div>
       </div>
       <div class="flex gap-4">
-        <button onclick="this.closest('.fixed').remove()" class="btn btn-ghost font-black">Cancel</button>
-        <button onclick="handleCreateUser()" class="btn btn-primary font-black px-12 h-[60px]">Create Profile</button>
+        <button onclick="this.closest('.fixed').remove()" class="btn btn-ghost font-black flex-1">Cancel</button>
+        <button onclick="handleCreateUser()" class="btn btn-primary font-black px-8 sm:px-12 h-[60px] flex-2">Create Profile</button>
       </div>
     </div>
   `;
@@ -925,17 +991,17 @@ async function handleCreateUser() {
 
 function showEditUserModal(id, name, role) {
   const modal = document.createElement("div");
-  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 flex items-center justify-center p-6";
+  modal.className = "fixed inset-0 z-[2000] bg-slate-900/90 overflow-y-auto p-4 sm:p-6 flex justify-center items-start sm:items-center";
   modal.innerHTML = `
-    <div class="medical-card-bright p-12 max-w-xl w-full">
-      <h3 class="text-3xl font-black mb-10 tracking-tight">Modify Personnel Profile</h3>
-      <div class="space-y-8 mb-10">
+    <div class="medical-card-bright p-6 sm:p-10 max-w-xl w-full my-8">
+      <h3 class="text-3xl font-black mb-8 sm:mb-10 tracking-tight">Modify Personnel Profile</h3>
+      <div class="space-y-6 sm:space-y-8 mb-8 sm:mb-10">
         <div><label class="form-label-bold">FULL NAME</label><input id="eu-name" value="${name}" class="form-input-large" /></div>
         <div><label class="form-label-bold">DESIGNATION</label><select id="eu-role" class="form-input-large"><option value="user" ${role === 'user' ? 'selected' : ''}>Citizen User</option><option value="admin" ${role === 'admin' ? 'selected' : ''}>Police Admin</option></select></div>
       </div>
       <div class="flex gap-4">
-        <button onclick="this.closest('.fixed').remove()" class="btn btn-ghost font-black">Cancel</button>
-        <button onclick="handleEditUser('${id}')" class="btn btn-primary font-black px-12 h-[60px]">Save Changes</button>
+        <button onclick="this.closest('.fixed').remove()" class="btn btn-ghost font-black flex-1">Cancel</button>
+        <button onclick="handleEditUser('${id}')" class="btn btn-primary font-black px-8 sm:px-12 h-[60px] flex-2">Save Changes</button>
       </div>
     </div>
   `;
