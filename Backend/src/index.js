@@ -37,6 +37,10 @@ app.use(cors((req, callback) => {
   const host = req.header("Host");
   const allowedOrigins = [
     "https://sdeegar-glitch.github.io", 
+    "http://devtshq.space",
+    "https://devtshq.space",
+    "http://www.devtshq.space",
+    "https://www.devtshq.space",
     "http://localhost:3000", 
     "http://localhost:5173",
     "http://localhost:5500",
