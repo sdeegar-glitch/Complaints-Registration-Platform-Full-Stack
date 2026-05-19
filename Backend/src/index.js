@@ -32,16 +32,35 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({ 
-  origin: [
+app.use(cors((req, callback) => {
+  const origin = req.header("Origin");
+  const host = req.header("Host");
+  const allowedOrigins = [
     "https://sdeegar-glitch.github.io", 
     "http://localhost:3000", 
     "http://localhost:5173",
     "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://127.0.0.1:3000"
-  ], 
-  credentials: true 
+  ];
+  
+  let isAllowed = false;
+  if (!origin) {
+    isAllowed = true;
+  } else if (allowedOrigins.includes(origin)) {
+    isAllowed = true;
+  } else {
+    try {
+      const originHost = new URL(origin).host;
+      if (originHost === host) {
+        isAllowed = true;
+      }
+    } catch (e) {
+      isAllowed = false;
+    }
+  }
+  
+  callback(null, { origin: isAllowed, credentials: true });
 }));
 app.use(cookieParser());
 
