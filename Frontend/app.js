@@ -1,10 +1,10 @@
 let currentUser = null;
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const isGitHubPages = window.location.hostname.endsWith('github.io') || window.location.hostname.endsWith('devtshq.space');
+const LOCAL_API_URL = 'http://localhost:3000/api';
+const PROD_API_URL = 'https://complaints-registration-platform-full-8wjq.onrender.com/api';
 
-const API_URL = isLocal
-  ? 'http://localhost:3000/api'
-  : (isGitHubPages ? 'https://complaints-registration-platform-full-8wjq.onrender.com/api' : '/api');
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? LOCAL_API_URL
+  : PROD_API_URL;
 
 async function api(path, options = {}) {
   const token = localStorage.getItem("token");
