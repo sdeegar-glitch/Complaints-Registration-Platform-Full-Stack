@@ -39,13 +39,8 @@ app.use(cors((req, callback) => {
     "https://sdeegar-glitch.github.io", 
     "http://devtshq.space",
     "https://devtshq.space",
-    "http://www.devtshq.space",
-    "https://www.devtshq.space",
-    "http://localhost:3000", 
-    "http://localhost:5173",
     "http://localhost:5500",
-    "http://127.0.0.1:5500",
-    "http://127.0.0.1:3000"
+    "http://127.0.0.1:5500"
   ];
   
   let isAllowed = false;
