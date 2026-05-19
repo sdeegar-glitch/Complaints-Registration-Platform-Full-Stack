@@ -16,11 +16,8 @@ const adminRoutes = require("./routes/admin");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Request Logger
-app.use((req, res, next) => {
-  console.log(`📡 [${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
-  next();
-});
+const morgan = require("morgan");
+app.use(morgan("dev"));
 
 // Basic Middleware
 app.use((req, res, next) => {

@@ -13,18 +13,21 @@ const router = express.Router();
  * Generates an AI resolution suggestion for a complaint.
  */
 router.post("/admin/complaints/:id/ai-suggest", authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  console.log(`🤖 [COMPLAINTS] Entering: Generate AI suggestion for ID: ${id}`);
   try {
-    const { id } = req.params;
     const complaint = await db.select().from(complaints).where(eq(complaints.id, id));
 
     if (complaint.length === 0) {
+      console.log(`⚠️ [COMPLAINTS] Complaint ID: ${id} not found`);
       return res.status(404).json({ error: "Complaint not found." });
     }
 
     const suggestion = await generateResolution(complaint[0].complaint_text);
+    console.log(`✅ [COMPLAINTS] Exiting: AI suggestion generated successfully`);
     res.json({ suggestion });
   } catch (err) {
-    console.error("AI suggest error:", err);
+    console.error(`❌ [COMPLAINTS] Error generating AI suggestion for ID: ${id}:`, err);
     res.status(500).json({ error: "Failed to generate AI suggestion." });
   }
 });
@@ -34,17 +37,20 @@ router.post("/admin/complaints/:id/ai-suggest", authenticate, requireAdmin, asyn
  * Generates an AI follow-up question for a complaint.
  */
 router.post("/ai/question", authenticate, async (req, res) => {
+  console.log("🤖 [COMPLAINTS] Entering: Generate AI follow-up question");
   try {
     const { complaint_text } = req.body;
 
     if (!complaint_text) {
+      console.log("⚠️ [COMPLAINTS] Empty complaint text submitted");
       return res.status(400).json({ error: "Complaint text is required." });
     }
 
     const question = await generateFollowUpQuestion(complaint_text);
+    console.log("✅ [COMPLAINTS] Exiting: AI follow-up question generated successfully");
     res.json({ question });
   } catch (err) {
-    console.error("AI question error:", err);
+    console.error("❌ [COMPLAINTS] Error generating AI follow-up question:", err);
     res.status(500).json({ error: "Failed to generate AI question. Please try again." });
   }
 });
@@ -54,10 +60,12 @@ router.post("/ai/question", authenticate, async (req, res) => {
  * Creates a new complaint for the logged-in user.
  */
 router.post("/complaints", authenticate, async (req, res) => {
+  console.log(`📝 [COMPLAINTS] Entering: Creating new complaint for user ID: ${req.user.id}`);
   try {
     const { complaint_text, ai_question, ai_answer } = req.body;
 
     if (!complaint_text) {
+      console.log("⚠️ [COMPLAINTS] Missing complaint_text in body");
       return res.status(400).json({ error: "Complaint text is required." });
     }
 
@@ -71,9 +79,10 @@ router.post("/complaints", authenticate, async (req, res) => {
       })
       .returning();
 
+    console.log(`✅ [COMPLAINTS] Exiting: Complaint created successfully with ID: ${result[0].id}`);
     res.status(201).json({ message: "Complaint submitted successfully.", complaint: result[0] });
   } catch (err) {
-    console.error("Create complaint error:", err);
+    console.error("❌ [COMPLAINTS] Error submitting complaint:", err);
     res.status(500).json({ error: "Failed to submit complaint. Please try again." });
   }
 });
@@ -83,6 +92,7 @@ router.post("/complaints", authenticate, async (req, res) => {
  * Returns all complaints belonging to the logged-in user.
  */
 router.get("/complaints/my", authenticate, async (req, res) => {
+  console.log(`📝 [COMPLAINTS] Entering: Fetching complaints for user ID: ${req.user.id}`);
   try {
     const result = await db
       .select()
@@ -90,9 +100,10 @@ router.get("/complaints/my", authenticate, async (req, res) => {
       .where(eq(complaints.user_id, req.user.id))
       .orderBy(complaints.created_at);
 
+    console.log(`✅ [COMPLAINTS] Exiting: Fetched ${result.length} complaints for user`);
     res.json({ complaints: result });
   } catch (err) {
-    console.error("Fetch my complaints error:", err);
+    console.error(`❌ [COMPLAINTS] Error fetching complaints for user ID: ${req.user.id}:`, err);
     res.status(500).json({ error: "Failed to fetch complaints." });
   }
 });
@@ -102,6 +113,7 @@ router.get("/complaints/my", authenticate, async (req, res) => {
  * Returns all complaints from all users (admin only).
  */
 router.get("/admin/complaints", authenticate, requireAdmin, async (req, res) => {
+  console.log("📝 [COMPLAINTS] Entering: [ADMIN] Fetching all complaints");
   try {
     const result = await db
       .select({
@@ -120,9 +132,10 @@ router.get("/admin/complaints", authenticate, requireAdmin, async (req, res) => 
       .innerJoin(users, eq(complaints.user_id, users.id))
       .orderBy(complaints.created_at);
 
+    console.log(`✅ [COMPLAINTS] Exiting: [ADMIN] Fetched ${result.length} complaints`);
     res.json({ complaints: result });
   } catch (err) {
-    console.error("Fetch admin complaints error:", err);
+    console.error("❌ [COMPLAINTS] Error fetching admin complaints list:", err);
     res.status(500).json({ error: "Failed to fetch complaints." });
   }
 });
@@ -132,11 +145,13 @@ router.get("/admin/complaints", authenticate, requireAdmin, async (req, res) => 
  * Resolves a complaint with a resolution text (admin only).
  */
 router.patch("/admin/complaints/:id/resolve", authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  console.log(`📝 [COMPLAINTS] Entering: [ADMIN] Resolving complaint ID: ${id}`);
   try {
-    const { id } = req.params;
     const { resolution_text } = req.body;
 
     if (!resolution_text) {
+      console.log("⚠️ [COMPLAINTS] Missing resolution_text in request body");
       return res.status(400).json({ error: "Resolution text is required." });
     }
 
@@ -151,18 +166,21 @@ router.patch("/admin/complaints/:id/resolve", authenticate, requireAdmin, async 
       .returning();
 
     if (result.length === 0) {
+      console.log(`⚠️ [COMPLAINTS] Complaint ID: ${id} not found to resolve`);
       return res.status(404).json({ error: "Complaint not found." });
     }
 
     // Get user info to send email (in background)
     const user = await db.select().from(users).where(eq(users.id, result[0].user_id));
     if (user.length > 0) {
+      console.log(`📧 [COMPLAINTS] Sending resolution email to: ${user[0].email}`);
       sendResolutionEmail(user[0].email, user[0].name, resolution_text).catch(e => console.error("Email Error:", e));
     }
 
+    console.log(`✅ [COMPLAINTS] Exiting: [ADMIN] Complaint ID: ${id} resolved successfully`);
     res.json({ message: "Complaint resolved.", complaint: result[0] });
   } catch (err) {
-    console.error("Resolve complaint error:", err);
+    console.error(`❌ [COMPLAINTS] Error resolving complaint ID: ${id}:`, err);
     res.status(500).json({ error: "Failed to resolve complaint." });
   }
 });
@@ -172,11 +190,12 @@ router.patch("/admin/complaints/:id/resolve", authenticate, requireAdmin, async 
  * Updates the status of a complaint (admin only).
  */
 router.patch("/admin/complaints/:id/status", authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  console.log(`📝 [COMPLAINTS] Entering: [ADMIN] Updating status for complaint ID: ${id} to: ${status}`);
   try {
-    const { id } = req.params;
-    const { status } = req.body;
-
     if (!status) {
+      console.log("⚠️ [COMPLAINTS] Missing status in request body");
       return res.status(400).json({ error: "Status is required." });
     }
 
@@ -187,12 +206,14 @@ router.patch("/admin/complaints/:id/status", authenticate, requireAdmin, async (
       .returning();
 
     if (result.length === 0) {
+      console.log(`⚠️ [COMPLAINTS] Complaint ID: ${id} not found to update status`);
       return res.status(404).json({ error: "Complaint not found." });
     }
 
+    console.log(`✅ [COMPLAINTS] Exiting: [ADMIN] Status updated for ID: ${id}`);
     res.json({ message: "Status updated.", complaint: result[0] });
   } catch (err) {
-    console.error("Status update error:", err);
+    console.error(`❌ [COMPLAINTS] Error updating status for ID: ${id}:`, err);
     res.status(500).json({ error: "Failed to update status." });
   }
 });
@@ -202,9 +223,9 @@ router.patch("/admin/complaints/:id/status", authenticate, requireAdmin, async (
  * Reopens a resolved complaint (admin only).
  */
 router.patch("/admin/complaints/:id/reopen", authenticate, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  console.log(`📝 [COMPLAINTS] Entering: [ADMIN] Reopening complaint ID: ${id}`);
   try {
-    const { id } = req.params;
-
     const result = await db
       .update(complaints)
       .set({
@@ -216,12 +237,14 @@ router.patch("/admin/complaints/:id/reopen", authenticate, requireAdmin, async (
       .returning();
 
     if (result.length === 0) {
+      console.log(`⚠️ [COMPLAINTS] Complaint ID: ${id} not found to reopen`);
       return res.status(404).json({ error: "Complaint not found." });
     }
 
+    console.log(`✅ [COMPLAINTS] Exiting: [ADMIN] Reopened complaint ID: ${id}`);
     res.json({ message: "Complaint reopened.", complaint: result[0] });
   } catch (err) {
-    console.error("Reopen complaint error:", err);
+    console.error(`❌ [COMPLAINTS] Error reopening complaint ID: ${id}:`, err);
     res.status(500).json({ error: "Failed to reopen complaint." });
   }
 });
@@ -231,8 +254,9 @@ router.patch("/admin/complaints/:id/reopen", authenticate, requireAdmin, async (
  * Public route to track a complaint by its ID.
  */
 router.get("/complaints/:id", async (req, res) => {
+  const { id } = req.params;
+  console.log(`📝 [COMPLAINTS] Entering: Fetching track info for ID: ${id}`);
   try {
-    const { id } = req.params;
     const result = await db
       .select({
         id: complaints.id,
@@ -248,12 +272,14 @@ router.get("/complaints/:id", async (req, res) => {
       .where(eq(complaints.id, id));
 
     if (result.length === 0) {
+      console.log(`⚠️ [COMPLAINTS] Track info: Complaint ID ${id} not found`);
       return res.status(404).json({ error: "Complaint not found with this ID." });
     }
 
+    console.log(`✅ [COMPLAINTS] Exiting: Track info loaded for ID: ${id}`);
     res.json({ complaint: result[0] });
   } catch (err) {
-    console.error("Track complaint error:", err);
+    console.error(`❌ [COMPLAINTS] Error tracking complaint ID: ${id}:`, err);
     res.status(500).json({ error: "Failed to track complaint." });
   }
 });
