@@ -600,9 +600,50 @@ async function showIncidentDetailsModal(id) {
 
 // ─── Investigation Tracker ───────────────────────────────────
 async function renderTrackPage(container, id) {
+  if (!id) {
+    container.innerHTML = `
+      <div class="max-w-xl mx-auto py-12 px-6 page-fade-in">
+        <div class="medical-card-bright p-8">
+          <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6 text-white shadow-xl shadow-primary/30">
+              <i class="fa-solid fa-magnifying-glass text-2xl"></i>
+            </div>
+            <h1 class="font-display text-4xl font-black text-slate-900 mb-2 tracking-tighter">Track Complaint</h1>
+            <p class="text-slate-500 text-sm font-medium">Enter your Complaint ID to track the real-time status of your grievance</p>
+          </div>
+          <div id="track-error"></div>
+          <div class="space-y-6">
+            <div>
+              <label class="form-label-bold text-primary">Complaint ID / Token</label>
+              <input class="form-input-large" id="track-id-input" type="text" placeholder="Enter Complaint ID (e.g., #XXXXXX)" />
+            </div>
+            <button class="w-full btn-large bg-primary text-white shadow-2xl h-[60px] text-lg font-black" id="track-btn" onclick="handleTrackSearch()">Track Status</button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    window.handleTrackSearch = () => {
+      clearError("track-error");
+      let inputVal = document.getElementById("track-id-input").value.trim();
+      if (!inputVal) {
+        showError("track-error", "Please enter a valid Complaint ID.");
+        return;
+      }
+      if (inputVal.startsWith("#")) {
+        inputVal = inputVal.substring(1);
+      }
+      renderTrackPage(container, inputVal);
+    };
+    return;
+  }
+
   container.innerHTML = `<div class="p-32 text-center"><div class="spinner mx-auto mb-8"></div><p>Loading timeline...</p></div>`;
   try {
-    const c = await api(`/complaints/${id}`);
+    const data = await api(`/complaints/${id}`);
+    const c = data.complaint;
+    if (!c) throw new Error("Could not find complaint details.");
+    
     const steps = [
       { label: "Complaint Filed", icon: "fa-file-signature", active: true },
       { label: "Under Review", icon: "fa-user-shield", active: true },
@@ -613,8 +654,15 @@ async function renderTrackPage(container, id) {
     container.innerHTML = `
       <div class="max-w-7xl mx-auto py-12 px-6 page-fade-in">
         <div class="medical-card-bright p-10 bg-slate-900 text-white mb-10">
-          <div class="text-[10px] font-black text-primary uppercase tracking-[0.4em] mb-4">Complaint ID: #${c.id.toUpperCase()}</div>
-          <h1 class="text-4xl font-black mb-6 tracking-tighter">Complaint Progress Timeline</h1>
+          <div class="flex justify-between items-start mb-6">
+            <div>
+              <div class="text-[10px] font-black text-primary uppercase tracking-[0.4em] mb-2">Complaint ID: #${c.id.slice(0,8).toUpperCase()}</div>
+              <h1 class="text-4xl font-black tracking-tighter">Complaint Progress Timeline</h1>
+            </div>
+            <button onclick="navigate('track')" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-black transition-all">
+              <i class="fa-solid fa-arrow-left mr-2"></i> Track Another
+            </button>
+          </div>
           <div class="flex justify-between relative pt-8 pb-4">
             <div class="absolute top-[48px] left-0 w-full h-1 bg-white/10"></div>
             ${steps.map(s => `
@@ -637,7 +685,7 @@ async function renderTrackPage(container, id) {
                 <div class="bg-slate-50 p-8 rounded-[32px] border-l-4 border-primary">
                   <div class="text-[8px] font-black text-primary uppercase tracking-widest mb-3">AI Question</div>
                   <p class="text-base font-black text-slate-900 italic">"${escapeHTML(c.ai_question)}"</p>
-                  <div class="mt-4 text-base font-bold text-slate-500">${escapeHTML(c.ai_answer || "Awaiting response...")}</div>
+                  <div class="mt-4 text-base font-bold text-slate-500">${escapeHTML(c.user_answer || c.ai_answer || "Awaiting response...")}</div>
                 </div>
               ` : ''}
             </div>
@@ -649,7 +697,25 @@ async function renderTrackPage(container, id) {
         </div>
       </div>
     `;
-  } catch (err) { container.innerHTML = `<div class="p-12 text-center text-secondary">${err.message}</div>`; }
+  } catch (err) {
+    container.innerHTML = `
+      <div class="max-w-xl mx-auto py-12 px-6 page-fade-in">
+        <div class="medical-card-bright p-8 text-center">
+          <div class="w-16 h-16 bg-secondary/10 rounded-2xl flex items-center justify-center mx-auto mb-6 text-secondary shadow-lg">
+            <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+          </div>
+          <h2 class="text-2xl font-black text-slate-900 mb-4 tracking-tight">Failed to Track Complaint</h2>
+          <p class="text-slate-500 text-sm font-medium mb-8 leading-relaxed">
+            We couldn't retrieve the status of that Complaint ID. Please make sure the ID is correct and try again.
+          </p>
+          <div class="flex gap-4">
+            <button onclick="navigate('track')" class="btn-large bg-primary text-white w-full">Try Again</button>
+            <button onclick="navigate('home')" class="btn-large bg-slate-100 text-slate-500 w-full">Go Home</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 }
 
 // ─── Authority Pages ──────────────────────────────────────────
